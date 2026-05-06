@@ -296,23 +296,68 @@ Module Proofs.
   Qed.
   #[global] Hint Resolve @singleton_remove : var_db.
 
+  Ltac subst_eq_hypothesis_fwd m :=
+    repeat match goal with
+    | [ Heq : Var.Map.Equal m _, H : context[m] |- _ ] =>
+      setoid_rewrite Heq in H
+    | [ Heq : Var.Map.Equal m _ |- context[m] ] =>
+      setoid_rewrite Heq
+    end;
+    (* if there are no more occurrences of m, clear Heq *)
+    try match goal with
+    | [ Heq : Var.Map.Equal m _ |- _ ] => clear m Heq
+    end.
+
+  Ltac subst_eq_hypothesis_bwd m :=
+    repeat match goal with
+    | [ Heq : Var.Map.Equal _ m, H : context[m] |- _ ] =>
+      setoid_rewrite <- Heq in H
+    | [ Heq : Var.Map.Equal _ m |- context[m] ] =>
+      setoid_rewrite <- Heq
+    end;
+    (* if there are no more occurrences of m, clear Heq *)
+    try match goal with
+    | [ Heq : Var.Map.Equal _ m |- _ ] => clear m Heq
+    end.
+
   Ltac subst_map :=
     repeat match goal with
+    | [ Heq : Var.Map.Equal ?m ?m |- _ ] => clear Heq; try clear m
+    | [ Heq : Var.Map.Equal ?m _ |- _ ] =>
+      subst_eq_hypothesis_fwd m
+    (*| [ Heq : Var.Map.Equal _ ?m |- _ ] =>
+      subst_eq_hypothesis m
+      *)
+    end.
+  (*
+    repeat match goal with
+    | [ Heq : Var.Map.Equal (Var.Map.empty _) ?m2, H : context[?m2] |- _ ] =>
+      setoid_rewrite <- Heq in H;
+      try rewrite <- Heq in *;
+      clear Heq
+    | [ Heq : Var.Map.Equal (Var.Map.empty _) ?m2 |- context[?m2] ] =>
+      setoid_rewrite <- Heq;
+      try rewrite <- Heq in *;
+      clear Heq
+    | [ Heq : Var.Map.Equal ?m1 (Var.Map.empty _), H : context[?m1] |- _ ] =>
+      setoid_rewrite Heq in H;
+      try rewrite Heq in *;
+      clear Heq
+    | [ Heq : Var.Map.Equal ?m1 (Var.Map.empty _) |- context[?m1] ] =>
+      setoid_rewrite Heq;
+      try rewrite Heq in *;
+      clear Heq
+
     | [ Heq : Var.Map.Equal ?m1 ?m2, H : context[?m1] |- _ ] =>
       setoid_rewrite Heq in H;
+      try rewrite Heq in *;
       try clear m1 Heq
     | [ Heq : Var.Map.Equal ?m1 ?m2 |- context[?m1] ] =>
       setoid_rewrite Heq;
-      try clear m1 Heq
-    end;
-    repeat match goal with
-    | [ Heq : Var.Map.Equal ?m1 ?m2, H : context[?m2] |- _ ] =>
-      setoid_rewrite <- Heq in H;
-      try clear m1 Heq
-    | [ Heq : Var.Map.Equal ?m1 ?m2 |- context[?m2] ] =>
-      setoid_rewrite <- Heq;
+      try rewrite Heq in *;
       try clear m1 Heq
     end.
+    *)
 
   Ltac simpl_Empty :=
       match goal with 
@@ -592,7 +637,7 @@ Module Proofs.
         apply disjoint_remove_1.
         apply disjoint_remove_2.
         auto.
-      - 
+      -
         intros k.
         autorewrite with var_db in *.
         reduce_eq_dec; auto.
@@ -634,21 +679,28 @@ Module Proofs.
         Var.Map.Equal m m0.
     Admitted.
 
+    About partition_empty_inv1.
+
     Ltac reduce_partition :=
     match goal with
 
       (* Partitions with the empty map *)
       | [ H : Var.MapFacts.Partition (Var.Map.empty _) ?D1 ?D2 |- _ ] =>
         let H1 := fresh "H1" in
-        set (H1 := partition_empty_inv1 D1 D2 H);
-        set (H2 := partition_empty_inv2 D1 D2 H);
+        let H2 := fresh "H2" in
+        assert (H1 : Map.Equal D1 (Map.empty _))
+          by (exact (partition_empty_inv1 D1 D2 H));
+        assert (H2 : Map.Equal D2 (Map.empty _))
+          by (exact (partition_empty_inv2 D1 D2 H));
         subst_map;
-        clear D1 D2 H
+        try clear H
       
       | [ H : Var.MapFacts.Partition ?m (Var.Map.empty _) ?m0 |- _ ] =>
-        apply partition_empty1_eq in H
+        apply partition_empty1_eq in H;
+        subst_map
       | [ H : Var.MapFacts.Partition ?m ?m0 (Var.Map.empty _) |- _ ] =>
-        apply partition_empty2_eq in H
+        apply partition_empty2_eq in H;
+        subst_map
 
       (* Partitions with remove*)
       | [ |- Var.MapFacts.Partition (Var.Map.remove ?x _) (Var.Map.remove ?x _) (Var.Map.remove ?x _) ] =>
