@@ -111,7 +111,7 @@ End Label.
 Inductive step : Choreography.t * Config.t -> Label.t -> Choreography.t * Config.t -> Prop :=
 
 | SendC : forall A e B x C cfg e' cfg',
-    Expr.step (e, cfg) (e', cfg') ->
+    Expr.step e cfg e'  cfg' ->
     step (Insn.Send A e B x :: C, cfg) (Label.Loc A) (Insn.Send A e' B x :: C, cfg')
 
 | SendB : forall A v B x C cfg C',
@@ -125,7 +125,7 @@ Inductive step : Choreography.t * Config.t -> Label.t -> Choreography.t * Config
     step (Insn.EPR A x B y :: C, cfg) (Label.EPR A B) (C', cfg')
 
 | LetC : forall A x e C cfg e' cfg',
-    Expr.step (e,cfg) (e',cfg') ->
+    Expr.step e cfg e' cfg' ->
     step (Insn.Let A x e :: C, cfg) (Label.Loc A) (Insn.Let A x e' :: C, cfg')
 | LetB : forall A x v C cfg C',
     Expr.Val v ->
@@ -133,14 +133,14 @@ Inductive step : Choreography.t * Config.t -> Label.t -> Choreography.t * Config
     step (Insn.Let A x v :: C, cfg) (Label.Loc A) (C', cfg)
 
 | LetBangC : forall A x e C cfg e' cfg',
-    Expr.step (e,cfg) (e',cfg') ->
+    Expr.step e cfg e' cfg' ->
     step (Insn.LetBang A x e :: C, cfg) (Label.Loc A) (Insn.LetBang A x e' :: C, cfg')
 | LetBangB : forall A x e0 C cfg C',
     C' = Choreography.subst A x e0 C ->
     step (Insn.LetBang A x (Expr.Bang e0) :: C, cfg) (Label.Loc A) (C', cfg)
 
 | LetPairC : forall A x1 x2 e C cfg e' cfg',
-    Expr.step (e,cfg) (e',cfg') ->
+    Expr.step e cfg e' cfg' ->
     step (Insn.LetPair A x1 x2 e :: C, cfg) (Label.Loc A) (Insn.LetPair A x1 x2 e' :: C, cfg')
 | LetPairB : forall A x1 x2 v1 v2 C cfg C',
     Expr.Val v1 -> Expr.Val v2 ->

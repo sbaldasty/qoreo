@@ -188,162 +188,161 @@ Fixpoint subst x v e :=
 
 
 
-Inductive step : Expr.t -> Var.Map.t nat -> Config.t -> Expr.t -> Var.Map.t nat -> Config.t -> Prop :=
+Inductive step : Expr.t -> Config.t -> Expr.t -> Config.t -> Prop :=
 
 (* Let *)
 | LetC :
-  forall x e1 e2 refs cfg e1' refs' cfg',
+  forall x e1 e2 cfg e1' cfg',
   
-  step e1 refs cfg e1' refs' cfg' ->
-  step (LetIn x e1 e2) refs cfg (LetIn x e1' e2) refs' cfg'
+  step e1 cfg e1' cfg' ->
+  step (LetIn x e1 e2) cfg (LetIn x e1' e2) cfg'
 
-| LetB : forall x v1 e2 refs cfg e2',
+| LetB : forall x v1 e2 cfg e2',
   Val v1 ->
   e2' = subst x v1 e2 ->
-  step (LetIn x v1 e2) refs cfg e2' refs cfg
+  step (LetIn x v1 e2) cfg e2' cfg
 
 (* Bang *)
 (* no reduction under Bang *)
 
 (* LetBang *)
 | LetBangC :
-  forall x e1 e2 refs cfg e1' refs' cfg',
+  forall x e1 e2 cfg e1' cfg',
 
-  step e1 refs cfg e1' refs' cfg' ->
+  step e1 cfg e1' cfg' ->
 
-  step (LetBang x e1  e2) refs cfg
-       (LetBang x e1' e2) refs' cfg'
+  step (LetBang x e1  e2) cfg
+       (LetBang x e1' e2) cfg'
 
-| LetBangB : forall x e1 e2 refs cfg e2',
+| LetBangB : forall x e1 e2 cfg e2',
   e2' = subst x (Bang e1) e2 ->
 
-  step (LetBang x (Bang e1) e2) refs cfg
-       e2' refs cfg
+  step (LetBang x (Bang e1) e2) cfg
+       e2' cfg
 
 (* If *)
-| IfC : forall e1 e2 e3 refs cfg e1' refs' cfg',
-  step e1 refs cfg e1' refs' cfg' ->
+| IfC : forall e1 e2 e3 cfg e1' cfg',
+  step e1 cfg e1' cfg' ->
 
-  step (If e1  e2 e3) refs cfg
-       (If e1' e2 e3) refs' cfg'
+  step (If e1  e2 e3) cfg
+       (If e1' e2 e3) cfg'
   
 
-| IfB : forall (b : bool) e2 e3 refs cfg e',
+| IfB : forall (b : bool) e2 e3 cfg e',
 
   (e' = if b then e2 else e3) ->
   
-  step (If (Bit b) e2 e3) refs cfg
-       e' refs cfg
+  step (If (Bit b) e2 e3) cfg
+       e' cfg
 
 (* Pair *)
-| PairC1 : forall e1 e2 refs cfg e1' refs' cfg',
-  step e1 refs cfg e1' refs' cfg' ->
+| PairC1 : forall e1 e2 cfg e1' cfg',
+  step e1 cfg e1' cfg' ->
 
-  step (Pair e1 e2) refs cfg (Pair e1' e2) refs' cfg'
+  step (Pair e1 e2) cfg (Pair e1' e2) cfg'
 
-| PairC2 : forall e1 e2 refs cfg e2' refs' cfg',
+| PairC2 : forall e1 e2 cfg e2' cfg',
 
   Val e1 ->
-  step e2 refs cfg e2' refs' cfg' ->
+  step e2 cfg e2' cfg' ->
 
-  step (Pair e1 e2) refs cfg (Pair e1 e2') refs' cfg'
+  step (Pair e1 e2) cfg (Pair e1 e2') cfg'
 
 (* LetPair *)
-| LetPairC : forall x1 x2 e1 e2 refs cfg e1' refs' cfg',
+| LetPairC : forall x1 x2 e1 e2 cfg e1' cfg',
 
-  step e1 refs cfg e1' refs' cfg' ->
+  step e1 cfg e1' cfg' ->
 
-  step (LetPair x1 x2 e1 e2) refs cfg
-       (LetPair x1 x2 e1' e2) refs' cfg'
+  step (LetPair x1 x2 e1 e2) cfg
+       (LetPair x1 x2 e1' e2) cfg'
 
-| LetPairB : forall x1 x2 v1 v2 e' refs cfg e'',
+| LetPairB : forall x1 x2 v1 v2 e' cfg e'',
   Val (Pair v1 v2) ->
   e'' = subst x2 v2 (subst x1 v1 e') ->
 
-  step (LetPair x1 x2 (Pair v1 v2) e') refs cfg 
-        e'' refs cfg
+  step (LetPair x1 x2 (Pair v1 v2) e') cfg 
+        e'' cfg
 
-| AppC1 : forall e1 e2 refs cfg e1' refs' cfg',
+| AppC1 : forall e1 e2 cfg e1' cfg',
 
-  step e1 refs cfg e1' refs' cfg' ->
+  step e1 cfg e1' cfg' ->
 
-  step (App e1 e2) refs cfg
-        (App e1' e2) refs' cfg'
+  step (App e1 e2) cfg
+        (App e1' e2) cfg'
 
-| AppC2 : forall e1 e2 refs cfg e2' refs' cfg',
+| AppC2 : forall e1 e2 cfg e2' cfg',
 
   Val e1 ->
-  step e2 refs cfg e2' refs' cfg' ->
+  step e2 cfg e2' cfg' ->
 
-  step (App e1 e2) refs cfg
-        (App e1 e2') refs' cfg'
+  step (App e1 e2) cfg
+        (App e1 e2') cfg'
 
-| AppB : forall x e v refs cfg e',
+| AppB : forall x e v cfg e',
 
   Val v ->
   e' = subst x v e ->
 
-  step (App (Lambda x e) v) refs cfg
-        e' refs cfg
+  step (App (Lambda x e) v) cfg
+        e' cfg
 
-| AppFixB : forall f x e v refs cfg e',
+| AppFixB : forall f x e v cfg e',
 
   Val v ->
   e' = subst x v (subst f (Fix f x e) e) ->
 
-  step (App (Fix f x e) v) refs cfg e' refs cfg
+  step (App (Fix f x e) v) cfg e' cfg
 
 
 (* New *)
-| NewC : forall e refs cfg e' refs' cfg',
+| NewC : forall e cfg e' cfg',
 
-  step e refs cfg e' refs' cfg' ->
+  step e cfg e' cfg' ->
 
-  step (New e) refs cfg (New e') refs' cfg'
+  step (New e) cfg (New e') cfg'
 
-| New0 : forall b refs cfg x refs' cfg',
+| New0 : forall b cfg x cfg',
 
-  (x, refs', cfg') = Config.new b refs cfg ->
+  (x, cfg') = Config.new b cfg ->
 
-  step (New (Bit b)) refs cfg
-        (QRef x) refs' cfg'
+  step (New (Bit b)) cfg
+        (QRef x) cfg'
 
 (* Meas *)
-| MeasC : forall e refs cfg e' refs' cfg',
+| MeasC : forall e cfg e' cfg',
 
-  step e refs cfg e' refs' cfg' ->
+  step e cfg e' cfg' ->
 
-  step (Meas e)  refs  cfg
-       (Meas e') refs' cfg'
+  step (Meas e)   cfg
+       (Meas e') cfg'
 
-| MeasB : forall i b x refs cfg refs' cfg',
-  Var.Singleton x i refs ->
-  (refs', cfg') = Config.measure b x refs cfg ->
+| MeasB : forall b x cfg cfg',
 
-  step (Meas (QRef x)) refs cfg (Bit b) refs' cfg'
+  cfg' = Config.measure b x cfg ->
+
+  step (Meas (QRef x)) cfg (Bit b) cfg'
 
 
 (* Unitary *)
-| UnitaryC : forall u e refs cfg e' refs' cfg',
+| UnitaryC : forall u e cfg e' cfg',
 
-  step e refs cfg e' refs' cfg' ->
+  step e cfg e' cfg' ->
 
-  step (Unitary u e) refs cfg
-       (Unitary u e') refs' cfg'
+  step (Unitary u e) cfg
+       (Unitary u e') cfg'
 
-| UnitaryB1 : forall i g q refs cfg cfg',
-  Var.Singleton q i refs ->
-  cfg' = Config.apply_gate g [q] refs cfg ->
+| UnitaryB1 : forall g q cfg cfg',
 
-  step (Unitary g (QRef q)) refs cfg
-       (QRef q) refs cfg'
+  cfg' = Config.apply_gate g [q] cfg ->
 
-| UnitaryB2 : forall i1 i2 g q1 q2 refs cfg cfg',
-  Var.Map.Equal refs (Var.Map.add q1 i1 (Var.Map.add q2 i2 (Var.Map.empty _))) ->
-  cfg' = Config.apply_gate g [q1;q2] refs cfg ->
+  step (Unitary g (QRef q)) cfg
+       (QRef q) cfg'
 
-  step (Unitary g (Pair (QRef q1) (QRef q2))) refs cfg
-       (Pair (QRef q1) (QRef q2)) refs cfg'
+| UnitaryB2 : forall g q1 q2 cfg cfg',
+  cfg' = Config.apply_gate g [q1;q2] cfg ->
+
+  step (Unitary g (Pair (QRef q1) (QRef q2))) cfg
+       (Pair (QRef q1) (QRef q2)) cfg'
 .
 
 (*
@@ -841,31 +840,36 @@ Lemma wt_subst2 : forall Θ1 Θ2 Θ0 Θ τ1 τ2 Γ Δ Θ' x1 v1 x2 v2 e τ',
 Proof.
 Admitted. 
 
-
-Lemma step_weakening : forall e refs ρ e' refs' ρ',
+Definition update_qrefs Θ cfg :=
+  {|
+    Config.dim := Config.dim cfg;
+    Config.qrefs := Θ;
+    Config.qstate := Config.qstate cfg
+  |}.
+Lemma step_weakening : forall e cfg e' cfg',
   
-  step e refs ρ e' refs' ρ' ->
+  step e cfg e' cfg' ->
 
-  forall refs1 refs2 τ,
-  WellTyped (Var.Map.empty _) (Var.Map.empty _) refs1 e τ ->
-  Var.MapFacts.Partition refs refs1 refs2 ->
-  exists refs1', 
-    step e refs1 ρ e' refs1' ρ'
-    /\
-    Var.MapFacts.Partition refs' refs1' refs2.
+  forall Θ1 Θ2 τ,
+  WellTyped (Var.Map.empty _) (Var.Map.empty _) Θ1 e τ ->
+  Var.MapFacts.Partition (Config.qrefs cfg) Θ1 Θ2 ->
+
+  exists Θ1',
+    step e (update_qrefs Θ1 cfg) e' (update_qrefs Θ1' cfg') /\
+      Var.MapFacts.Partition (Config.qrefs cfg') Θ1' Θ2.
 Proof.
 Admitted.
 
 
 Ltac step_weakening_tac :=
   match goal with
-  | [ Hstep : step ?e ?refs ?ρ ?e' ?refs' ?ρ',
+  | [ Hstep : step ?e ?cfg ?e' ?cfg',
       HTyped : WellTyped ?Γ ?Δ ?Θ ?e ?τ
       |- _ ] =>
-      let refs1 := fresh "refs1" in
+      let Θ1 := fresh "Θ1" in
       let Hstep1 := fresh "Hstep1" in
       let Hpart1 := fresh "Hpart1" in
-      edestruct (step_weakening _ _ _ _ _ _ Hstep) as [refs1 [Hstep1 Hpart1]]; eauto
+      edestruct (step_weakening _ _ _ _ Hstep) as [Θ1 [Hstep1 Hpart1]]; eauto
   end.
 
 
@@ -893,22 +897,26 @@ Hint Resolve Var.MapFacts.Partition_sym : var_db.
 Lemma preservation : forall Γ Δ Θ e τ,
   WellTyped Γ Δ Θ e τ ->
 
-  forall ρ e' Θ' ρ',
+  forall cfg e' cfg' Θ',
+  step e cfg e' cfg' ->
+
   Var.Map.Empty Γ ->
   Var.Map.Empty Δ ->
-  
-  step e Θ ρ e' Θ' ρ' ->
+  Var.Map.Equal Θ (Config.qrefs cfg) ->
+  Var.Map.Equal Θ' (Config.qrefs cfg') ->
   
   WellTyped Γ Δ Θ' e' τ.
 Proof.
   intros ? ? ? ? ? HWT.
-  induction HWT; intros ? ? ? ? HΓ HΔ Hstep;
+  induction HWT; intros ? ? ? ? Hstep HΓ HΔ HΘ HΘ';
     unfold Var.Singleton in *;
-    try (rewrite HΔ in *; clear Δ HΔ);
+    subst_map;
+    (*try (rewrite HΔ in *; clear Δ HΔ);
     try (rewrite HΔ' in *; clear Δ' HΔ');
-    try (inversion Hstep; auto; fail).
-  * vsimpl.
-    inversion Hstep; subst; clear Hstep.
+    *)
+    try (inversion Hstep; auto; fail);
+    vsimpl.
+  * inversion Hstep; subst; clear Hstep.
     + (* e1 -> e1' *)  
 
       (* We are given: (e1,refs) ~> (e1',refs') *)
@@ -939,10 +947,6 @@ Proof.
     + vsimpl.
       inversion HWT1; subst.
       vsimpl.
-      match goal with (* not sure why vsimple doesn't get this *)
-      | [ Heq : Var.Map.Equal Θ' _ |- _ ] =>
-        setoid_rewrite Heq
-      end.
       eapply wt_subst_bang; eauto with var_db.
 
   * (* If *) 
@@ -957,10 +961,8 @@ Proof.
 
     + inversion HWT1; subst.
       vsimpl.
-      match goal with
-      | [ Heq : Var.Map.Equal Θ' _ |- _ ] => setoid_rewrite Heq
-      end.
       destruct b; auto.
+
   * (* Pair *)
     vsimpl.
     inversion Hstep; subst; clear Hstep.
@@ -1012,14 +1014,15 @@ Proof.
       eapply (IHHWT) in Hstep1; eauto with var_db;
         try reflexivity.
       econstructor; eauto with var_db.
+      vsimpl. auto.
 
-    + econstructor; eauto with var_db.
 
-      match goal with
-      | [ H : _ = Config.measure _ _ _ _ |- _ ] =>
-        inversion H; subst; clear H
-      end.
-      eauto with var_db.
+    + inversion HWT; subst; clear HWT.
+      simpl.
+      unfold Var.Singleton in *.
+      vsimpl.
+      autorewrite with var_db.
+      econstructor; eauto with var_db.
 
   * (* New *)
     vsimpl.
@@ -1029,21 +1032,23 @@ Proof.
       (* We are given: (e1,refs) ~> (e1',refs') *)
       (* By weakening, we know that (e1,refs1) ~> (e1',refs1') where refs'=refs1' + refs2 *)
       step_weakening_tac; eauto with var_db.
+      vsimpl.
 
       (* So by the IH, Γ;refs1' |- e1' : τ *)
       eapply (IHHWT) in Hstep1; eauto with var_db;
         try reflexivity.
+      rewrite <- Hpart1.
       econstructor; eauto with var_db.
 
     + match goal with
-      | [ H : _ = Config.new _ _ _ |- _ ] =>
-        inversion H; subst; clear H
+      | [ H : _ = Config.new _ _ |- _ ] =>
+        inversion H; subst; clear H; simpl
       end.
+      remember (Var.fresh (Config.qrefs cfg)) 
+        as idx eqn:Hidx; clear Hidx.
       inversion HWT; subst; clear HWT.
       vsimpl.
-      remember (Var.fresh Θ) as idx eqn:Hidx;
-        clear Hidx.
-      subst_map.
+      
       econstructor; eauto with var_db.
       unfold Var.Singleton. reflexivity.
 
@@ -1059,6 +1064,7 @@ Proof.
       (* So by the IH, Γ;refs1' |- e1' : τ *)
       eapply (IHHWT) in Hstep1; eauto with var_db;
         try reflexivity.
+      vsimpl.
       econstructor; eauto with var_db.
 
     + inversion HWT; subst.
