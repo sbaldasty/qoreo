@@ -889,7 +889,6 @@ Hint Constructors Val : var_db.
 Hint Resolve Var.MapFacts.Partition_sym : var_db.
 
 
-
 Lemma preservation : forall Γ Δ Θ e τ,
   WellTyped Γ Δ Θ e τ ->
 

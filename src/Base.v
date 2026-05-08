@@ -679,8 +679,7 @@ Module Proofs.
         Var.Map.Equal m m0.
     Admitted.
 
-    About partition_empty_inv1.
-
+    
     Ltac reduce_partition :=
     match goal with
 
@@ -836,20 +835,41 @@ Module Config.
     qstate := super U (qstate cfg)
   |}.
   
-
-  Definition epr refs (cfg : t) : Var.t * Var.t * Var.Map.t nat * t :=
+  (**
+    Inputs:
+      - refs : an assignment of variables in indices in cfg
+      - cfg : a configuration of dimension d
+    Returns:
+      - a fresh variable x
+      - an updated map that includes refs along with x |-> d
+      - an updated configuration where the dimension has been incremented to d+1
+    Note that the quantum state inside the resulting configuration still has dimension d, and will need to be incremented.
+  *)
+  Definition fresh_var (refs : Var.Map.t nat) (cfg : t) : Var.t * Var.Map.t nat * t :=
     let d := dim cfg in
-    let x1 := Var.fresh refs in
-    let refs' := Var.Map.add x1 d refs in
-    let x2 := Var.fresh refs' in
-    let refs'' := Var.Map.add x2 (d+1)%nat refs in
+    let x := Var.fresh refs in
+    let refs' := Var.Map.add x d refs in
+    let cfg' := {| dim := 1 + dim cfg; qstate := qstate cfg |} in
+    (x, refs', cfg').
 
+  Definition epr_cfg cfg : nat * nat * t :=
+    let d := dim cfg in
     let bell00 := Quantum.EPRpair † × Quantum.EPRpair in
     let rho' := kron (qstate cfg) bell00 in
-    (x1, x2, refs'', {|
+    (d, 1+d, {|
       dim := 2 + dim cfg;
       qstate := rho'
-    |}).
+    |})%nat.
+
+  Definition epr refs (cfg : t) : Var.t * Var.t * Var.Map.t nat * t :=
+    match epr_cfg cfg with
+    | (idx1, idx2, cfg') =>
+      let x1 := Var.fresh refs in
+      let refs' := Var.Map.add x1 idx1 refs in
+      let x2 := Var.fresh refs' in
+      let refs'' := Var.Map.add x2 idx2 refs' in
+      (x1, x2, refs'', cfg')
+    end.
 
 
   Definition gate_to_matrix (n : nat) (U : unitary) (qs : list nat) : Matrix (2^n) (2^n) :=
@@ -943,3 +963,35 @@ Module Actor.
 
 
 End Actor.
+
+
+Module ChorEnv.
+    Definition t T := Actor.Map.t (Var.Map.t T).
+    (* equivalence of ChorEnv.t *)
+    Definition Equal {T} (G1 G2 : t T) : Prop := Actor.Map.Equiv (Var.Map.Equal) G1 G2.
+    Definition find {T} (A : Actor.t) (G : t T) : Var.Map.t T :=
+        match Actor.Map.find A G with
+        | Some D => D
+        | None => Var.Map.empty _
+        end.
+
+    Definition add {T} (A : Actor.t) (x : Var.t) (tau : T) (G : t T) : t T :=
+        let D := find A G in
+        Actor.Map.add A (Var.Map.add x tau D) G.
+
+    Definition MapsTo {T} (A : Actor.t) (x : Var.t) (tau : T) (G : t T) : Prop :=
+      Var.Map.MapsTo x tau (find A G).
+
+
+  Definition epr (A B : Actor.t) (refs : t nat) (cfg : Config.t)
+                 : Var.t * Var.t * t nat * Config.t :=
+    match Config.epr_cfg cfg with
+    | (idx1, idx2, cfg') =>
+      let x1 := Var.fresh (find A refs) in
+      let refs' := add A x1 idx1 refs in
+      let x2 := Var.fresh (find B refs') in
+      let refs'' := add B x2 idx2 refs' in
+
+      (x1, x2, refs'', cfg')
+    end.
+End ChorEnv.
