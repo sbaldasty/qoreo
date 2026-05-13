@@ -277,53 +277,47 @@ Proof.
     { contradict HEPPA. simpl; inversion 1. }
     inversion HEPPA; subst;
     inversion HEPPB; subst; simpl in *;
-        autorewrite with var_db in *.
+        autorewrite with actor_db in *.
     * destruct I as   [ (*Send*) A0 v0 B0 y0
                     | (*EPR*)  A0 x0 B0 y0
                     | (*Let*)  A0 x0 e0
                     | (*Let!*) A0 x0 e0
                     | (*LetPair *) A0 x0 y0 e0
       ];
-        simpl in *; autorewrite with var_db in *.
-      + rewrite Actor.Map.MProofs.FSetProperties.add_iff in H2.
-        autorewrite with var_db in *.
-       Actor.Map.Tactics.compare A A0.
-
-
-        
+        simpl in *; autorewrite with actor_db in *.
+      + Actor.Map.Tactics.compare A A0; try tauto.
       
-      destruct (Actor.eq_dec A A0); subst; try tauto.
         apply Choreography.Delay.
         { eapply IHC'; eauto. }
-        { simpl; intros D. autorewrite with var_db. 
-          intros [[? | ?] [? | ?]]; subst; firstorder.
+        { simpl; intros D. autorewrite with actor_db in *.
+          intros [[? | ?] [? | ?]]; subst; auto.
         }
       + apply Choreography.Delay.
         { eapply IHC'; eauto. }
-        { simpl; intros D. autorewrite with var_db. 
-          intros [[? | ?] [? | ?]]; subst; firstorder.
+        { simpl; intros D. autorewrite with actor_db in *. 
+          intros [[? | ?] [? | ?]]; subst; auto.
         }
 
       + apply Choreography.Delay.
         { eapply IHC'; eauto. }
-        { simpl; intros D. autorewrite with var_db. 
-          intros [[? | ?] ?]; subst; firstorder.
+        { simpl; intros D. autorewrite with actor_db. 
+          intros [[? | ?] ?]; subst; auto.
         }
       + apply Choreography.Delay.
         { eapply IHC'; eauto. }
-        { simpl; intros D. autorewrite with var_db. 
-          intros [[? | ?] ?]; subst; firstorder.
+        { simpl; intros D. autorewrite with actor_db. 
+          intros [[? | ?] ?]; subst; auto.
         }
       + apply Choreography.Delay.
         { eapply IHC'; eauto. }
-        { simpl; intros D. autorewrite with var_db. 
-          intros [[? | ?] ?]; subst; firstorder.
+        { simpl; intros D. autorewrite with actor_db. 
+          intros [[? | ?] ?]; subst; auto.
         }
 
     * absurd (A=A); auto.
     * absurd (B=B); auto.
     
-    * repeat rewrite Actor.eq_dec_refl.
+    * repeat Actor.Map.Tactics.reduce_eq_dec.
       constructor; auto.
 Qed.
 
@@ -364,13 +358,9 @@ Lemma step_send_EPP_N : forall A B C PA PB y v N,
 Proof.
     intros A B C PA PB y v N EPPN EPPA EPPB.
     intros D PD.
-    split; intros HIn;
-        repeat rewrite Actor.MapFacts.F.add_mapsto_iff in *.
+        split; intros HIn.
     * admit.
     * destruct HIn as [HIn EPPD].
-      destruct (Actor.eq_dec A D).
-      { left. subst; split; auto.  admit. }
-      { right. split; auto. admit. }
       (* Might need a different definition of EPP_N. *)
 Admitted.
       

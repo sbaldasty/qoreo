@@ -712,6 +712,7 @@ to define alpha equivalence for Expr.tessions
 and then to prove this with respect to
     Var.Map.Equiv alpha_equiv
 *)
+
 Lemma WellTyped_context_equal :
   forall Γ Δ Θ e τ,
     WellTyped Γ Δ Θ e τ ->
@@ -734,7 +735,7 @@ Proof.
       try reflexivity;
       eauto; fail).
 Qed.
-    
+
 
 Global Instance WellTypedProper : Proper (Var.Map.Equal ==> Var.Map.Equal ==> Var.Map.Equal ==> eq ==> eq ==> iff) WellTyped.
 Proof.
