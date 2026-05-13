@@ -1040,4 +1040,31 @@ Module ChorEnv.
 
       (x1, x2, refs'', cfg')
     end.
+
+Lemma MapsTo_add : forall T A x (tau : T) G,
+  ChorEnv.MapsTo A x tau G ->
+  ChorEnv.Equal (ChorEnv.add A x tau G)
+                G.
+Proof.
+  intros T A x tau G H.
+  unfold ChorEnv.Equal.
+  unfold Actor.Map.Equiv, ChorEnv.add, ChorEnv.MapsTo, ChorEnv.find in *.
+  split; [intros B | intros B a1 a2];
+    autorewrite with actor_db var_db in *.
+  * split; auto.
+    intros [? | ?]; auto; subst.
+    apply Actor.Map.Properties.F.in_find_iff.
+    destruct (Actor.Map.find B G); try discriminate.
+    apply Var.Map.Properties.F.empty_mapsto_iff in H; auto.
+  * intros [ [? Hfind] | [? Ha1] ] Hmaps; subst.
+    + apply Actor.Map.Properties.F.find_mapsto_iff in Hmaps.
+      rewrite Hmaps in *; auto.
+      apply Var.Map.Properties.F.find_mapsto_iff in H.
+      intros z; autorewrite with var_db.
+      Var.Map.Tactics.compare x z; auto.
+    + apply Actor.Map.Properties.F.find_mapsto_iff in Hmaps.
+      apply Actor.Map.Properties.F.find_mapsto_iff in Ha1.
+      rewrite Hmaps in Ha1.
+      inversion Ha1; subst; reflexivity.
+Qed.
 End ChorEnv.

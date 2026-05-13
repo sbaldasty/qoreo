@@ -21,7 +21,7 @@ Module Insn.
         end.
 
     
-(* substitute the value v for A.x in I *)
+    (* substitute the value v for A.x in I *)
     Definition subst (A : Actor.t) (x : Var.t) (v : Expr.t)  (I : t) : t :=
     match I with
     | Send B1 e B2 y => 
@@ -50,9 +50,25 @@ Module Insn.
       | LetBang B y e => [(B,y)]
       | LetPair B y1 y2 e => [(B,y1);(B,y2)]
     end.
-           
-    Definition bind_eqb  (Ax : bindt) (By: bindt) : bool :=
-      if Actor.eq_dec (fst Ax) (fst By) then if Var.eq_dec (snd Ax) (snd By) then true else false else false.
+
+    Definition bind_eq  (Ax : bindt) (By: bindt) : Prop := (fst Ax) = (fst By) /\ (snd Ax) = (snd By).
+
+    Lemma nbeq : forall Ax By, ((fst Ax) <> (fst By) \/ (snd Ax) <> (snd By)) -> ~(bind_eq Ax By).
+    Proof.
+      intros. unfold bind_eq. tauto.
+    Qed.
+    
+    Definition bind_eq_dec  (Ax : bindt) (By: bindt) : {bind_eq Ax By} + {~(bind_eq Ax By)} :=
+      match ((Actor.eq_dec (fst Ax) (fst By)), (Var.eq_dec (snd Ax) (snd By))) with
+      | (left pt1, left pt2) => left (conj pt1 pt2)
+      | (right pt1, _) => right (nbeq Ax By (or_introl pt1))
+      | (_, right pt2) => right (nbeq Ax By (or_intror pt2))
+      end.
+    
+    Definition bind_eqb (Ax : bindt) (By: bindt) : bool :=
+      match (bool_of_sumbool (bind_eq_dec Ax By)) with
+      | exist _ x _ => x
+      end.
 
     Definition rebound_in (A : Actor.t) (x : Var.t) (I : t) : bool :=
       match I with
@@ -246,6 +262,12 @@ Inductive WellTyped : ChorEnv.t Expr.typ -> ChorEnv.t Expr.typ -> ChorEnv.t nat 
     WellTyped G D T ((Insn.LetPair A x1 x2 e)::C)
 .
 
+
+From Stdlib Require Import Morphisms. (* for Proper *)
+
+Global Instance WellTypedProper : Proper (ChorEnv.Equal ==> ChorEnv.Equal ==> ChorEnv.Equal ==> eq ==> iff) WellTyped.
+Admitted.
+
 Lemma extension : forall A G x (tau : Expr.typ),
     ChorEnv.MapsTo A x tau G <-> Var.Map.MapsTo x tau (ChorEnv.find A G).
 Proof.
@@ -334,6 +356,12 @@ Lemma no_capture_add : forall A x (tau1 : Expr.typ) I G,
 Proof.
 Admitted.
 
+
+Lemma add_MapsTo : forall A x (tau : A) m,
+  Var.Map.MapsTo x tau m ->
+  Var.Map.Equal (Var.Map.add x tau m) m.
+Admitted.
+
 Lemma wt_subst_bang : forall tau G D T A x v C,
     WellTyped G D T C ->
     Expr.Val v ->
@@ -348,82 +376,97 @@ Proof.
 
   - apply EPR; auto.
 
-
     fold Choreography.subst.
     destruct (Insn.rebound_in A x (Insn.EPR A0 x0 B y)).
     { auto. }
     { apply IHHWT. auto. }
-
+  
   - eapply Send; eauto.
 
-    (* I think we need a nonlinear Expr.wt_subst to proceed with this case? *)
-    admit.
-
-    fold Choreography.subst.
-    destruct (Insn.rebound_in A x (Insn.Send A0 e B y)) eqn:Heq.
-    { eapply HWT. }
-    {
-      apply IHHWT.
-      pose proof (no_capture_add A x tau (Insn.Send A0 e B y) G) as HNCA.
-      specialize (HNCA Heq B y tau0).
-      apply HNCA.
-      unfold Insn.bindings.
-      simpl.
-      auto.
-      auto.
-    }
+    + destruct (Actor.FSet.MF.eq_dec A A0) eqn:Heq; subst; eauto.
+      {
+        eapply Expr.wt_subst_bang; eauto.
+        apply Expr.weakening; eauto.
+        eapply Expr.WellTypedProper;
+          [ | reflexivity | reflexivity | reflexivity | reflexivity | eauto].
+        intros z. autorewrite with var_db.
+        Var.Map.Tactics.compare x z; auto.
+        unfold ChorEnv.MapsTo in HA.
+        symmetry;
+          rewrite <- Var.Map.Properties.F.find_mapsto_iff;
+          auto.
+      }
+    
+    + fold Choreography.subst.
+      destruct (Insn.rebound_in A x (Insn.Send A0 e B y)) eqn:Heq.
+      { eapply HWT. }
+      {
+        apply IHHWT.
+        pose proof (no_capture_add A x tau (Insn.Send A0 e B y) G) as HNCA.
+        specialize (HNCA Heq B y tau0).
+        apply HNCA.
+        unfold Insn.bindings.
+        simpl.
+        auto.
+        auto.
+      }
 
   - eapply LetBang; eauto.
-    
-    admit.
 
-    fold Choreography.subst.
-    destruct (Insn.rebound_in A x (Insn.LetBang A0 x0 e)) eqn:Heq.
-    { eapply HWT. }
-    {
-      apply IHHWT.
-      pose proof (no_capture_add A x tau (Insn.LetBang A0 x0 e) G) as HNCA.
-      specialize (HNCA Heq A0 x0 tau0).
-      apply HNCA.
-      unfold Insn.bindings.
-      simpl.
-      auto.
-      auto.
-    }
+    + Actor.Map.Tactics.compare A A0; eauto.
+      {
+        eapply Expr.wt_subst_bang; eauto.
+        { apply Expr.weakening; eauto. }
+        { rewrite add_MapsTo; auto. }
+      }
+
+    + fold Choreography.subst.
+      destruct (Insn.rebound_in A x (Insn.LetBang A0 x0 e)) eqn:Heq.
+      { eapply HWT. }
+      {
+        apply IHHWT.
+        pose proof (no_capture_add A x tau (Insn.LetBang A0 x0 e) G) as HNCA.
+        specialize (HNCA Heq A0 x0 tau0).
+        apply HNCA.
+        unfold Insn.bindings.
+        simpl.
+        auto.
+        auto.
+      }
 
   - eapply LetIn; eauto.
 
-    destruct (Actor.eq_dec A A0) eqn:Heq.
+    + Actor.Map.Tactics.compare A A0; eauto.
+      eapply Expr.wt_subst_bang; eauto.
+      { apply Expr.weakening; eauto. }
+      { rewrite add_MapsTo; eauto. }
 
-    {
-      pose proof (Expr.wt_subst_bang tau (ChorEnv.find A0 G) DeltaA1 ThetaA1 x v e tau0) as HEWTS.
-      eapply HEWTS.
-      (*
-      auto.
-      auto.
-      auto.
-      auto.
-      rewrite <- e0.
-      rewrite <- extension.
-      auto.
-      *)
-      admit.
-      admit.
-      admit.
-    }
-    { auto. }
+    + 
+      fold Choreography.subst.
+      destruct (Insn.rebound_in A x (Insn.Let A0 x0 e)) eqn:Heq.
+      { eapply HWT. }
+      {
+        apply IHHWT.
+        auto.
+      }
+      
 
-    fold Choreography.subst.
-    destruct (Insn.rebound_in A x (Insn.Let A0 x0 e)) eqn:Heq.
-    { eapply HWT. }
-    {
-      apply IHHWT.
-      auto.
-    }
+  - eapply LetPair; eauto.
     
-    - eapply LetPair.
+    + Actor.Map.Tactics.compare A A0; eauto.
     
-Admitted.
+      {
+        pose proof (Expr.wt_subst_bang tau (ChorEnv.find A G) DeltaA1 ThetaA1 x v e (Expr.Tensor tau1 tau2)) as HEWTS.
+          eapply HEWTS.
+        { auto. }
+        { apply Expr.weakening; auto. }
+        { rewrite add_MapsTo; eauto. }
+      }
+    + fold Choreography.subst.
+      destruct (Insn.rebound_in A x (Insn.LetPair A0 x1 x2 e)) eqn:Heq;
+        eauto.
+
+Qed.
     
     
 Lemma wt_subst_lin : forall ThetaA1 ThetaA2 tau G D T A x v C,
