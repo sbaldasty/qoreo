@@ -361,6 +361,7 @@ Lemma add_MapsTo : forall A x (tau : A) m,
   Var.Map.MapsTo x tau m ->
   Var.Map.Equal (Var.Map.add x tau m) m.
 Admitted.
+Require Import Setoid.
 
 Lemma wt_subst_bang : forall tau G D T A x v C,
     WellTyped G D T C ->
@@ -387,18 +388,16 @@ Proof.
       inversion HWTV; subst; inversion HV; subst.
       Var.Map.Tactics.vsimpl.
       destruct (Actor.FSet.MF.eq_dec A A0) eqn:Heq; subst; eauto.
-      {
+      { (* A = A0 *)
         eapply Expr.wt_subst_bang; eauto.
-        apply Expr.weakening; eauto.
-        eapply Expr.WellTypedProper;
-          [ | reflexivity | reflexivity | reflexivity | reflexivity | eauto].
-        intros z. autorewrite with var_db.
-        Var.Map.Tactics.compare x z; auto.
-        unfold ChorEnv.MapsTo in HA.
-        apply Var.Map.Properties.F.find_mapsto_iff in HA.
-        symmetry;
-          rewrite <- Var.Map.Properties.F.find_mapsto_iff;
-          auto.
+        setoid_replace (Var.Map.add x tau (ChorEnv.find A0 G))
+                with   (ChorEnv.find A0 G);
+                auto.
+        {
+          intros z. autorewrite with var_db.
+          Var.Map.Tactics.reduce_eq_dec; auto.
+          symmetry; apply Var.Map.find_1; auto.
+        }
       }
     
     + fold Choreography.subst.
@@ -420,8 +419,14 @@ Proof.
     + Actor.Map.Tactics.compare A A0; eauto.
       {
         eapply Expr.wt_subst_bang; eauto.
-        { apply Expr.weakening; eauto. }
-        { rewrite add_MapsTo; auto. }
+        setoid_replace (Var.Map.add x tau (ChorEnv.find A G))
+                with   (ChorEnv.find A G);
+                auto.
+        {
+          intros z. autorewrite with var_db.
+          Var.Map.Tactics.reduce_eq_dec; auto.
+          symmetry; apply Var.Map.find_1; auto.
+        }
       }
 
     + fold Choreography.subst.
@@ -442,8 +447,14 @@ Proof.
 
     + Actor.Map.Tactics.compare A A0; eauto.
       eapply Expr.wt_subst_bang; eauto.
-      { apply Expr.weakening; eauto. }
-      { rewrite add_MapsTo; eauto. }
+       setoid_replace (Var.Map.add x tau (ChorEnv.find A G))
+                with   (ChorEnv.find A G);
+                auto.
+        {
+          intros z. autorewrite with var_db.
+          Var.Map.Tactics.reduce_eq_dec; auto.
+          symmetry; apply Var.Map.find_1; auto.
+        }
 
     + 
       fold Choreography.subst.
