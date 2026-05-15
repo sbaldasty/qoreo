@@ -1,5 +1,4 @@
 From Qoreo Require Import Base.
-Import Base.Tactics.
 From Qoreo Require Expr Choreography.
 
 Module Label := Choreography.Label.
@@ -55,33 +54,33 @@ Module Process.
 
     (* Semantics *)
 
-    Inductive step : Process.t * Config.t -> Process.t * Config.t -> Prop :=
-    | LetC : forall x e P ρ e' ρ',
-        Expr.step (e, ρ) (e', ρ') ->
-        step (Insn.Let x e :: P, ρ) (Insn.Let x e' :: P, ρ')
-    | LetB : forall x v P ρ P',
+    Inductive step : Process.t -> Var.Map.t nat -> Config.t -> Process.t -> Var.Map.t nat -> Config.t -> Prop :=
+    | LetC : forall x e P refs ρ e' refs' ρ',
+        Expr.step e refs ρ e' refs' ρ' ->
+        step (Insn.Let x e :: P) refs ρ (Insn.Let x e' :: P) refs' ρ'
+    | LetB : forall x v P refs ρ P',
         Expr.Val v ->
         P' = Process.subst x v P ->
-        step (Insn.Let x v :: P, ρ) (P', ρ)
+        step (Insn.Let x v :: P) refs ρ P' refs ρ
 
-    | LetBangC : forall x e P ρ e' ρ',
-        Expr.step (e, ρ) (e', ρ') ->
-        step (Insn.LetBang x e :: P, ρ) (Insn.LetBang x e' :: P, ρ')
-    | LetBangB : forall x e P ρ P',
+    | LetBangC : forall x e P refs ρ e' refs' ρ',
+        Expr.step e refs ρ e' refs' ρ' ->
+        step (Insn.LetBang x e :: P) refs ρ (Insn.LetBang x e' :: P) refs' ρ'
+    | LetBangB : forall x e P refs ρ P',
         P' = Process.subst x e P ->
-        step (Insn.LetBang x (Expr.Bang e) :: P, ρ) (P', ρ)
+        step (Insn.LetBang x (Expr.Bang e) :: P) refs ρ P' refs ρ
 
-    | LetPairC : forall x1 x2 e P ρ e' ρ',
-        Expr.step (e, ρ) (e', ρ') ->
-        step (Insn.LetPair x1 x2 e :: P, ρ) (Insn.LetPair x1 x2 e' :: P, ρ')
-    | LetPairP : forall x1 x2 v1 v2 P ρ P',
+    | LetPairC : forall x1 x2 e P refs ρ e' refs' ρ',
+        Expr.step e refs ρ e' refs' ρ' ->
+        step (Insn.LetPair x1 x2 e :: P) refs ρ (Insn.LetPair x1 x2 e' :: P) refs' ρ'
+    | LetPairP : forall x1 x2 v1 v2 P ρ refs P',
         Expr.Val v1 -> Expr.Val v2 ->
         P' = Process.subst x2 v2 (Process.subst x1 v1 P) ->
-        step (Insn.LetPair x1 x2 (Expr.Pair v1 v2) :: P, ρ) (P', ρ)
+        step (Insn.LetPair x1 x2 (Expr.Pair v1 v2) :: P) refs ρ P' refs ρ
 
-    | SendC : forall e B P ρ e' ρ',
-        Expr.step (e, ρ) (e', ρ') ->
-        step (Insn.Send e B :: P, ρ) (Insn.Send e' B :: P, ρ')
+    | SendC : forall e B P refs ρ e' refs' ρ',
+        Expr.step e refs ρ e' refs' ρ' ->
+        step (Insn.Send e B :: P) refs ρ (Insn.Send e' B :: P) refs' ρ'
     .
 
 End Process.
@@ -89,32 +88,38 @@ End Process.
 Module Network.
     Definition t := Actor.Map.t (Process.t).
 
-    Inductive step : Network.t * Config.t -> Label.t -> Network.t * Config.t -> Prop :=
+    Inductive step :    Network.t -> ChorEnv.t nat -> Config.t ->
+                        Label.t ->
+                        Network.t -> ChorEnv.t nat -> Config.t -> Prop :=
 
-    | Loc : forall P P' N cfg A N' cfg',
+    | Loc : forall P P' refsA' N' N refs cfg A refs' cfg',
       Actor.Map.MapsTo A P N ->
-      Process.step (P, cfg) (P', cfg') ->
+      Process.step  P (ChorEnv.find A refs) cfg
+                    P' refsA' cfg' ->
       N' = Actor.Map.add A P' N ->
-      step (N, cfg) (Label.Loc A) (N', cfg')
+      ChorEnv.Equal refs' (Actor.Map.add A refsA' refs) ->
+      step  N refs cfg
+            (Label.Loc A)
+            N' refs' cfg'
 
-    | Send : forall PA PB y N cfg A v B N',
+    | Send : forall PA PB y N refs cfg A v B N',
       A <> B ->
       Actor.Map.MapsTo A (Insn.Send v B :: PA) N ->
       Actor.Map.MapsTo B (Insn.Receive y A :: PB) N ->
       Expr.Val v ->
       N' = Actor.Map.add A PA (Actor.Map.add B (Process.subst y v PB) N) ->
       
-      step (N, cfg) (Label.Send A v B) (N', cfg)
+      step N refs cfg (Label.Send A v B) N' refs cfg
 
-    | EPR : forall x y PA PB qA qB N cfg A B N' cfg',
+    | EPR : forall x y PA PB qA qB N refs cfg A B N' refs' cfg',
       A <> B ->
       Actor.Map.MapsTo A (Insn.EPR x B :: PA) N ->
       Actor.Map.MapsTo B (Insn.EPR y A :: PB) N ->
-      Config.epr cfg = (qA, qB, cfg') ->
+      ChorEnv.epr A B refs cfg = (qA, qB, refs', cfg') ->
       N' = Actor.Map.add A (Process.subst x (Expr.Var qA) PA) (
             Actor.Map.add B (Process.subst y (Expr.Var qB) PB) N) ->
 
-      step (N, cfg) (Label.EPR A B) (N', cfg')
+      step N refs cfg (Label.EPR A B) N' refs' cfg'
     .
 
     Record WF (Actors : Actor.FSet.t) (N : Network.t) :=
@@ -226,12 +231,12 @@ Definition EPP_N (C : Choreography.t) (N : Network.t) : Prop :=
 
 (* Correctness of EPP *)
 
-Theorem soundness : forall C C' cfg cfg' l N,
+Theorem soundness : forall C C' refs cfg refs' cfg' l N,
 
-    Choreography.step (C, cfg) l (C', cfg') ->
+    Choreography.step C refs cfg l C' refs' cfg' ->
     EPP_N C N ->
     exists N', EPP_N C'  N' /\
-               Network.step (N, cfg) l (N', cfg').
+               Network.step N refs cfg l N' refs' cfg'.
 Admitted.
 
 Require Import Stdlib.Program.Equality.
@@ -264,11 +269,11 @@ Lemma step_send_complete : forall C A v y B PA PB,
     EPP A C (Insn.Send v B :: PA) ->
     EPP B C (Insn.Receive y A :: PB) ->
     Expr.Val v ->
-    forall cfg,
-        Choreography.step (C, cfg) (Label.Send A v B) (step_send A B C, cfg).
+    forall refs cfg,
+        Choreography.step C refs cfg (Label.Send A v B) (step_send A B C) refs cfg.
 Proof.
     induction C as [ | I C'];
-        intros A v y B PA PB HEPPA HEPPB Hval cfg.
+        intros A v y B PA PB HEPPA HEPPB Hval refs cfg.
     { contradict HEPPA. simpl; inversion 1. }
     inversion HEPPA; subst;
     inversion HEPPB; subst; simpl in *;
@@ -280,38 +285,39 @@ Proof.
                     | (*LetPair *) A0 x0 y0 e0
       ];
         simpl in *; autorewrite with actor_db in *.
-      + destruct (Actor.eq_dec A A0); try (subst; firstorder; fail). 
+      + Actor.Map.Tactics.compare A A0; try tauto.
+      
         apply Choreography.Delay.
         { eapply IHC'; eauto. }
-        { simpl; intros D. autorewrite with actor_db. 
-          intros [[? | ?] [? | ?]]; subst; firstorder.
+        { simpl; intros D. autorewrite with actor_db in *.
+          intros [[? | ?] [? | ?]]; subst; auto.
         }
       + apply Choreography.Delay.
         { eapply IHC'; eauto. }
-        { simpl; intros D. autorewrite with actor_db. 
-          intros [[? | ?] [? | ?]]; subst; firstorder.
+        { simpl; intros D. autorewrite with actor_db in *. 
+          intros [[? | ?] [? | ?]]; subst; auto.
         }
 
       + apply Choreography.Delay.
         { eapply IHC'; eauto. }
         { simpl; intros D. autorewrite with actor_db. 
-          intros [[? | ?] ?]; subst; firstorder.
+          intros [[? | ?] ?]; subst; auto.
         }
       + apply Choreography.Delay.
         { eapply IHC'; eauto. }
         { simpl; intros D. autorewrite with actor_db. 
-          intros [[? | ?] ?]; subst; firstorder.
+          intros [[? | ?] ?]; subst; auto.
         }
       + apply Choreography.Delay.
         { eapply IHC'; eauto. }
         { simpl; intros D. autorewrite with actor_db. 
-          intros [[? | ?] ?]; subst; firstorder.
+          intros [[? | ?] ?]; subst; auto.
         }
 
     * absurd (A=A); auto.
     * absurd (B=B); auto.
     
-    * repeat rewrite Actor.eq_dec_refl.
+    * repeat Actor.Map.Tactics.reduce_eq_dec.
       constructor; auto.
 Qed.
 
@@ -352,13 +358,9 @@ Lemma step_send_EPP_N : forall A B C PA PB y v N,
 Proof.
     intros A B C PA PB y v N EPPN EPPA EPPB.
     intros D PD.
-    split; intros HIn;
-        repeat rewrite Actor.MapFacts.F.add_mapsto_iff in *.
+        split; intros HIn.
     * admit.
     * destruct HIn as [HIn EPPD].
-      destruct (Actor.eq_dec A D).
-      { left. subst; split; auto.  admit. }
-      { right. split; auto. admit. }
       (* Might need a different definition of EPP_N. *)
 Admitted.
       
@@ -415,59 +417,56 @@ Admitted.
 *)
 
 
-(** Return the choreography C' such that C -(EPR A x B y)-> C' in the configuration cfg *)
-Fixpoint step_epr A B cfg (C : Choreography.t) : Choreography.t :=
+(** Return the choreography C' such that C, refs, cfg' -(EPR A x B y)-> C' in the configuration cfg *)
+Fixpoint step_epr A B refs cfg (C : Choreography.t) : Choreography.t :=
     match C with
     | [] => []
     | Choreography.Insn.EPR A0 x0 B0 y0 :: C' =>
         match Actor.eq_dec A A0, Actor.eq_dec B B0 with
         | left _, left _ => 
-            match Config.epr cfg with
-            | (q1,q2,cfg') =>
+            match ChorEnv.epr A B refs cfg with
+            | (q1,q2,refs',cfg') =>
                 Choreography.subst A x0 (Expr.Var q1)
                 (Choreography.subst B y0 (Expr.Var q2)
                 C')
             end
         | _, _ =>
-            Choreography.Insn.EPR A0 x0 B0 y0 :: (step_epr A B cfg C')
+            Choreography.Insn.EPR A0 x0 B0 y0 :: (step_epr A B refs cfg C')
         end
-    | I' :: C' => I' :: step_epr A B cfg C'
+    | I' :: C' => I' :: step_epr A B refs cfg C'
     end.
 
 Lemma step_epr_complete : forall C A x y B PA PB,
     EPP A C (Insn.EPR x B :: PA) ->
     EPP B C (Insn.EPR y A :: PB) ->
-    forall cfg q1 q2 cfg',
-        Config.epr cfg = (q1,q2,cfg') ->
-        Choreography.step (C, cfg) (Label.EPR A B) (step_epr A B cfg C, cfg').
+    forall refs cfg q1 q2 refs' cfg',
+        ChorEnv.epr A B refs cfg = (q1,q2,refs', cfg') ->
+        Choreography.step   C refs cfg
+                            (Label.EPR A B)
+                            (step_epr A B refs cfg C) refs' cfg'.
 Admitted.
 
-Lemma step_epr_EPP_N : forall A B C PA PB x y N cfg q1 q2 cfg',
+Lemma step_epr_EPP_N : forall A B C PA PB x y N refs cfg q1 q2 refs' cfg',
     EPP_N C N ->
     EPP A C (Insn.EPR x B :: PA) ->
     EPP B C (Insn.EPR y A :: PB) ->
-    Config.epr cfg = (q1, q2, cfg') ->
-    EPP_N (step_epr A B cfg C)
+    ChorEnv.epr A B refs cfg = (q1, q2, refs', cfg') ->
+    EPP_N (step_epr A B refs cfg C)
         (Actor.Map.add A (Process.subst x (Expr.Var q1) PA)
             (Actor.Map.add B (Process.subst y (Expr.Var q2) PB) N)).
 Admitted.
 
-Theorem completeness : forall N cfg l N' cfg',
+Theorem completeness : forall N refs cfg l N' refs' cfg',
 
-    Network.step (N, cfg) l (N', cfg') ->
+    Network.step N refs cfg l N' refs' cfg' ->
 
     forall C,
     EPP_N C N ->
     exists C', EPP_N C' N' /\
-                Choreography.step (C, cfg) l (C', cfg').
+                Choreography.step C refs cfg l C' refs' cfg'.
 Proof.
-    intros N cfg l N' cfg' Hstep.
-    remember (N, cfg) as cfgN.
-    remember (N', cfg') as cfgN'.
-    generalize dependent cfg. generalize dependent cfg'.
-    induction Hstep; intros cfg0' Hcfg0' cfg0 Hcfg0 C HEPP;
-        inversion Hcfg0'; inversion Hcfg0;
-        subst; clear Hcfg0' Hcfg0.
+    intros N refs cfg l N' refs' cfg' Hstep.
+    induction Hstep; intros C HEPP; subst.
     
     * (* local step *) admit.
     * (* send *)
@@ -481,7 +480,7 @@ Proof.
     * (* EPR *) 
       apply HEPP in H0; destruct H0 as [_ HEPPA].
       apply HEPP in H1; destruct H1 as [_ HEPPB].
-      exists (step_epr A B cfg0 C).
+      exists (step_epr A B refs cfg C).
       split.
       { eapply step_epr_EPP_N; eauto. }
       { eapply step_epr_complete; eauto. }

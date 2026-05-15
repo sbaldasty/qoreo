@@ -123,129 +123,153 @@ End Label.
 
 (** Semantics **)
 
+Inductive step : Choreography.t -> ChorEnv.t nat -> Config.t ->
+                 Label.t ->
+                 Choreography.t -> ChorEnv.t nat -> Config.t -> Prop :=
 
-Inductive step : Choreography.t * Config.t -> Label.t -> Choreography.t * Config.t -> Prop :=
+| SendC : forall refsA' A e B x C refs cfg e' refs' cfg',
+    Expr.step e (ChorEnv.find A refs) cfg e' refsA' cfg' ->
+    ChorEnv.Equal refs' (Actor.Map.add A refsA' refs) ->
+    step  (Insn.Send A e B x :: C) refs cfg
+          (Label.Loc A)
+          (Insn.Send A e' B x :: C) refs' cfg'
 
-| SendC : forall A e B x C cfg e' cfg',
-    Expr.step (e, cfg) (e', cfg') ->
-    step (Insn.Send A e B x :: C, cfg) (Label.Loc A) (Insn.Send A e' B x :: C, cfg')
-
-| SendB : forall A v B x C cfg C',
+| SendB : forall A v B x C refs cfg C',
     Expr.Val v ->
     C' = Choreography.subst B x v C ->
-    step (Insn.Send A v B x :: C, cfg) (Label.Send A v B) (C', cfg)
+    step  (Insn.Send A v B x :: C) refs cfg
+          (Label.Send A v B)
+          C' refs cfg
 
-| EPRB : forall q1 q2 A x B y C cfg C' cfg',
-    Config.epr cfg = (q1,q2,cfg') ->
+| EPRB : forall q1 q2 A x B y C refs cfg C' refs' cfg',
+    ChorEnv.epr A B refs cfg = (q1, q2, refs', cfg') ->
+
     C' = Choreography.subst A x (Expr.Var q1) (Choreography.subst B y (Expr.Var q2) C) ->
-    step (Insn.EPR A x B y :: C, cfg) (Label.EPR A B) (C', cfg')
 
-| LetC : forall A x e C cfg e' cfg',
-    Expr.step (e,cfg) (e',cfg') ->
-    step (Insn.Let A x e :: C, cfg) (Label.Loc A) (Insn.Let A x e' :: C, cfg')
-| LetB : forall A x v C cfg C',
+    step  (Insn.EPR A x B y :: C) refs cfg
+          (Label.EPR A B) 
+          C' refs' cfg'
+
+| LetC : forall refsA' A x e C refs cfg e' refs' cfg',
+    Expr.step e (ChorEnv.find A refs) cfg e' refsA' cfg' ->
+    
+    ChorEnv.Equal refs' (Actor.Map.add A refsA' refs) ->
+
+    step  (Insn.Let A x e :: C) refs cfg
+          (Label.Loc A)
+          (Insn.Let A x e' :: C) refs' cfg'
+
+| LetB : forall A x v C refs cfg C',
     Expr.Val v ->
     C' = Choreography.subst A x v C ->
-    step (Insn.Let A x v :: C, cfg) (Label.Loc A) (C', cfg)
+    step  (Insn.Let A x v :: C) refs cfg
+          (Label.Loc A)
+          C' refs cfg
 
-| LetBangC : forall A x e C cfg e' cfg',
-    Expr.step (e,cfg) (e',cfg') ->
-    step (Insn.LetBang A x e :: C, cfg) (Label.Loc A) (Insn.LetBang A x e' :: C, cfg')
-| LetBangB : forall A x e0 C cfg C',
+| LetBangC : forall refsA' A x e C refs cfg e' refs' cfg',
+    Expr.step e (ChorEnv.find A refs) cfg e' refsA' cfg' ->
+    ChorEnv.Equal refs' (Actor.Map.add A refsA' refs) ->
+    step  (Insn.LetBang A x e :: C) refs cfg
+          (Label.Loc A)
+          (Insn.LetBang A x e' :: C) refs' cfg'
+
+| LetBangB : forall A x e0 C refs cfg C',
     C' = Choreography.subst A x e0 C ->
-    step (Insn.LetBang A x (Expr.Bang e0) :: C, cfg) (Label.Loc A) (C', cfg)
+    step  (Insn.LetBang A x (Expr.Bang e0) :: C) refs cfg
+          (Label.Loc A)
+          C' refs cfg
 
-| LetPairC : forall A x1 x2 e C cfg e' cfg',
-    Expr.step (e,cfg) (e',cfg') ->
-    step (Insn.LetPair A x1 x2 e :: C, cfg) (Label.Loc A) (Insn.LetPair A x1 x2 e' :: C, cfg')
-| LetPairB : forall A x1 x2 v1 v2 C cfg C',
+| LetPairC : forall refsA' A x1 x2 e C refs cfg e' refs' cfg',
+    Expr.step e (ChorEnv.find A refs) cfg e' refsA' cfg' ->
+    ChorEnv.Equal refs' (Actor.Map.add A refsA' refs) ->
+
+    step  (Insn.LetPair A x1 x2 e :: C) refs cfg
+          (Label.Loc A)
+          (Insn.LetPair A x1 x2 e' :: C) refs' cfg'
+
+| LetPairB : forall A x1 x2 v1 v2 C refs cfg C',
     Expr.Val v1 -> Expr.Val v2 ->
     C' = Choreography.subst A x1 v1 (Choreography.subst A x2 v2 C) ->
-    step (Insn.LetPair A x1 x2 (Expr.Pair v1 v2) :: C, cfg) (Label.Loc A) (C', cfg)
+    step  (Insn.LetPair A x1 x2 (Expr.Pair v1 v2) :: C) refs cfg
+          (Label.Loc A) 
+          C' refs cfg
 
 (* delay *)
-| Delay : forall I C cfg C' cfg' l,
-    step (C, cfg) l (C', cfg') ->
+| Delay : forall I C refs cfg C' refs' cfg' l,
+    step C refs cfg l C' refs' cfg' ->
     Actor.FSet.Empty (Actor.FSet.inter (Label.actors l) (Insn.actors I)) ->
-    step (I::C, cfg) l (I::C', cfg')
+    step (I::C) refs cfg l (I::C') refs' cfg'
 .
 
-Module ChorTEnv.
-    Definition t := Actor.Map.t (Var.Map.t Expr.typ).
-    (* equivalence of ChorTEnv.t *)
-    Definition Equal (G1 G2 : t) : Prop := Actor.Map.Equiv (Var.Map.Equal) G1 G2.
-    Definition find (A : Actor.t) (G : t) : Var.Map.t Expr.typ :=
-        match Actor.Map.find A G with
-        | Some D => D
-        | None => Var.Map.empty _
-        end.
 
-    Definition add (A : Actor.t) (x : Var.t) (tau : Expr.typ) (G : t) : t :=
-        let D := find A G in
-        Actor.Map.add A (Var.Map.add x tau D) G.
-
-    Definition MapsTo (A : Actor.t) (x : Var.t) (tau : Expr.typ) (G : t) : Prop :=
-      Var.Map.MapsTo x tau (find A G).
-End ChorTEnv.
-
-
-Inductive WellTyped : ChorTEnv.t -> ChorTEnv.t -> Choreography.t -> Prop :=
+Inductive WellTyped : ChorEnv.t Expr.typ -> ChorEnv.t Expr.typ -> ChorEnv.t nat -> Choreography.t -> Prop :=
   
-| Nil : forall G D, 
+| Nil : forall G D T, 
     Actor.Map.Empty D ->
-    WellTyped G D nil
+    Actor.Map.Empty T ->
+    WellTyped G D T nil
                                 
-| EPR : forall G D A x B y C,
+| EPR : forall G D T A x B y C,
     A <> B ->
-    WellTyped G (ChorTEnv.add B y Expr.QUBIT (ChorTEnv.add A x Expr.QUBIT D)) C ->
+    WellTyped G (ChorEnv.add B y Expr.QUBIT (ChorEnv.add A x Expr.QUBIT D)) T C ->
 
-    ~ Var.Map.In x (ChorTEnv.find A D) ->
-    ~ Var.Map.In y (ChorTEnv.find A D) ->
+    ~ Var.Map.In x (ChorEnv.find A D) ->
+    ~ Var.Map.In y (ChorEnv.find A D) ->
 
-    WellTyped G D ((Insn.EPR A x B y)::C)
+    WellTyped G D T ((Insn.EPR A x B y)::C)
 
-| Send : forall DeltaA1 DeltaA2 G D A e tau B y C,
+| Send : forall DeltaA1 DeltaA2 ThetaA1 ThetaA2 G D T A e tau B y C,
     A <> B ->
-    Expr.WellTyped (ChorTEnv.find A G) DeltaA1 e (Expr.BANG tau) ->
-    WellTyped (ChorTEnv.add B y tau G) (Actor.Map.add A DeltaA2 D) C ->
+    Expr.WellTyped (ChorEnv.find A G) DeltaA1 ThetaA1 e (Expr.BANG tau) ->
+    WellTyped (ChorEnv.add B y tau G) (Actor.Map.add A DeltaA2 D) (Actor.Map.add A ThetaA1 T) C ->
 
-    Var.MapFacts.Partition (ChorTEnv.find A D) DeltaA1 DeltaA2 ->
+    Var.Map.Partition (ChorEnv.find A D) DeltaA1 DeltaA2 ->
+    Var.Map.Partition (ChorEnv.find A T) ThetaA1 ThetaA2 ->
 
-    WellTyped G D ((Insn.Send A e B y)::C)
+    WellTyped G D T ((Insn.Send A e B y)::C)
 
-| LetBang : forall DeltaA1 DeltaA2 G D A x e tau C,
+| LetBang : forall DeltaA1 DeltaA2 ThetaA1 ThetaA2 G D T A x e tau C,
 
-    Expr.WellTyped (ChorTEnv.find A G) DeltaA1 e (Expr.BANG tau) ->
-    WellTyped (ChorTEnv.add A x tau G) (Actor.Map.add A DeltaA2 D) C ->
+    Expr.WellTyped (ChorEnv.find A G) DeltaA1 ThetaA1 e (Expr.BANG tau) ->
+    WellTyped (ChorEnv.add A x tau G) (Actor.Map.add A DeltaA2 D) (Actor.Map.add A ThetaA1 T) C ->
 
-    Var.MapFacts.Partition (ChorTEnv.find A D) DeltaA1 DeltaA2 ->
+    Var.Map.Partition (ChorEnv.find A D) DeltaA1 DeltaA2 ->
+    Var.Map.Partition (ChorEnv.find A T) ThetaA1 ThetaA2 ->
 
-    WellTyped G D ((Insn.LetBang A x e)::C)
+    WellTyped G D T ((Insn.LetBang A x e)::C)
 
-| LetIn : forall DeltaA1 DeltaA2 G D A x e tau C,
+| LetIn : forall DeltaA1 DeltaA2 ThetaA1 ThetaA2 G D T A x e tau C,
 
-    Expr.WellTyped (ChorTEnv.find A G) DeltaA1 e tau ->
-    WellTyped G (Actor.Map.add A (Var.Map.add x tau DeltaA2) D) C ->
+    Expr.WellTyped (ChorEnv.find A G) DeltaA1 ThetaA1 e tau ->
+    WellTyped G (Actor.Map.add A (Var.Map.add x tau DeltaA2) D) (Actor.Map.add A ThetaA1 T) C ->
 
-    Var.MapFacts.Partition (ChorTEnv.find A D) DeltaA1 DeltaA2 ->
+    Var.Map.Partition (ChorEnv.find A D) DeltaA1 DeltaA2 ->
+    Var.Map.Partition (ChorEnv.find A T) ThetaA1 ThetaA2 ->
     ~ Var.Map.In x DeltaA2 ->
 
-    WellTyped G D ((Insn.Let A x e)::C)
+    WellTyped G D T ((Insn.Let A x e)::C)
 
-| LetPair: forall DeltaA1 DeltaA2 G D A x1 x2 tau1 tau2 e C,
+| LetPair: forall DeltaA1 DeltaA2 ThetaA1 ThetaA2 G D T A x1 x2 tau1 tau2 e C,
 
-    Expr.WellTyped (ChorTEnv.find A G) DeltaA1 e (Expr.Tensor tau1 tau2) ->
-    WellTyped G (Actor.Map.add A (Var.Map.add x1 tau1 (Var.Map.add x2 tau2 DeltaA2)) D) C ->
+    Expr.WellTyped (ChorEnv.find A G) DeltaA1 ThetaA1 e (Expr.Tensor tau1 tau2) ->
+    WellTyped G (Actor.Map.add A (Var.Map.add x1 tau1 (Var.Map.add x2 tau2 DeltaA2)) D) (Actor.Map.add A ThetaA1 T) C ->
 
-    Var.MapFacts.Partition (ChorTEnv.find A D) DeltaA1 DeltaA2 ->
+    Var.Map.Partition (ChorEnv.find A D) DeltaA1 DeltaA2 ->
+    Var.Map.Partition (ChorEnv.find A T) ThetaA1 ThetaA2 ->
     ~ Var.Map.In x1 DeltaA2 -> 
     ~ Var.Map.In x2 DeltaA2 ->
 
-    WellTyped G D ((Insn.LetPair A x1 x2 e)::C)
+    WellTyped G D T ((Insn.LetPair A x1 x2 e)::C)
 .
 
-Lemma extension : forall A G x tau,
-    ChorTEnv.MapsTo A x tau G <-> Var.Map.MapsTo x tau (ChorTEnv.find A G).
+
+From Stdlib Require Import Morphisms. (* for Proper *)
+
+Global Instance WellTypedProper : Proper (ChorEnv.Equal ==> ChorEnv.Equal ==> ChorEnv.Equal ==> eq ==> iff) WellTyped.
+Admitted.
+
+Lemma extension : forall A G x (tau : Expr.typ),
+    ChorEnv.MapsTo A x tau G <-> Var.Map.MapsTo x tau (ChorEnv.find A G).
 Proof.
   intros A G x tau.
   split.
@@ -254,27 +278,27 @@ Proof.
 Qed.
 
 Lemma map_subset_add : forall G1 G2,
-    (forall A x tau, (ChorTEnv.MapsTo A x tau G1 -> ChorTEnv.MapsTo A x tau G2)) ->
+    (forall A x (tau : Expr.typ), (ChorEnv.MapsTo A x tau G1 -> ChorEnv.MapsTo A x tau G2)) ->
     (forall A x tau1 B y tau2,
-        (ChorTEnv.MapsTo A x tau1 (ChorTEnv.add B y tau2 G1) ->
-         ChorTEnv.MapsTo A x tau1 (ChorTEnv.add B y tau2 G2))).
+        (ChorEnv.MapsTo A x tau1 (ChorEnv.add B y tau2 G1) ->
+         ChorEnv.MapsTo A x tau1 (ChorEnv.add B y tau2 G2))).
 Proof.
   intros G1 G2 HMA1 A x tau1 B y tau2 HMA2. 
 Admitted.
 
-Lemma weakening_gen : forall G D C,
-    WellTyped G D C -> forall G',
-      (forall A x tau, ChorTEnv.MapsTo A x tau G -> ChorTEnv.MapsTo A x tau G') ->
-      WellTyped G' D C.
+Lemma weakening_gen : forall G D T C,
+    WellTyped G D T C -> forall G',
+      (forall A x tau, ChorEnv.MapsTo A x tau G -> ChorEnv.MapsTo A x tau G') ->
+      WellTyped G' D T C.
 Proof.
-  intros G D C HWT.
+  intros G D T C HWT.
   induction HWT.
   
-  - intros G' HW. apply Nil. auto. 
+  - intros G' HW. apply Nil; auto. 
 
   - intros G' HW. apply EPR; auto.
 
-  - intros G' HW. eapply Send. auto.
+  - intros G' HW. eapply Send; auto.
     eapply Expr.weakening_gen. eauto.
 
     intros x tau' HEW.
@@ -283,17 +307,19 @@ Proof.
     apply (HW A x tau') in HEW.
     auto.
 
-    specialize (IHHWT (ChorTEnv.add B y tau G')).
+    specialize (IHHWT (ChorEnv.add B y tau G')).
     apply IHHWT.
     intros A0 x tau' HWB.
     pose proof (map_subset_add G G' HW A0 x tau' B y tau) as HMA.
     auto.
 
     auto.
+    eauto.
 
-  - intros G' HW. eapply LetBang.
+  - intros G' HW. eapply LetBang; eauto.
+
     pose proof (Expr.weakening_gen
-                  (ChorTEnv.find A G) DeltaA1 e (Expr.BANG tau) H (ChorTEnv.find A G'))
+                  (ChorEnv.find A G) DeltaA1 ThetaA1 e (Expr.BANG tau) H (ChorEnv.find A G'))
       as HEW.
     apply HEW.
     intros x' tau' HVM.
@@ -302,212 +328,181 @@ Proof.
     rewrite -> extension in HW.
     auto.
 
-    specialize (IHHWT (ChorTEnv.add A x tau G')).
+    specialize (IHHWT (ChorEnv.add A x tau G')).
     apply IHHWT.
     intros A0 x0 tau0 HE.
     pose proof (map_subset_add G G' HW A0 x0 tau0 A x tau) as HMA.
     auto.
 
-    auto.
-
-  - intros G' HW. eapply LetIn.
-    pose proof (Expr.weakening_gen (ChorTEnv.find A G) DeltaA1 e tau H (ChorTEnv.find A G'))
+  - intros G' HW. eapply LetIn; eauto.
+    pose proof (Expr.weakening_gen (ChorEnv.find A G) DeltaA1 ThetaA1 e tau H (ChorEnv.find A G'))
       as HEW.
     setoid_rewrite -> extension in HW.
     auto.
 
-    apply IHHWT.
-    auto.
-
-    apply H0.
-
-    auto.
-
-  - intros G' HW. eapply LetPair.
-    pose proof (Expr.weakening_gen (ChorTEnv.find A G) DeltaA1 e
-                  (Expr.Tensor tau1 tau2) H (ChorTEnv.find A G'))
+  - intros G' HW. eapply LetPair; eauto.
+    pose proof (Expr.weakening_gen (ChorEnv.find A G) DeltaA1 ThetaA1 e
+                  (Expr.Tensor tau1 tau2) H (ChorEnv.find A G'))
       as HEW.
     setoid_rewrite -> extension in HW.
-    auto.
-    
-    apply IHHWT.
-    auto.
-
-    apply H0.
-    auto.
-
     auto.
 Qed.
 
-Lemma no_capture_add : forall A x tau1 I G, 
+Lemma no_capture_add : forall A x (tau1 : Expr.typ) I G, 
     (Insn.rebound_in A x I) = false ->
     (forall B y tau2, (List.In (B,y) (Insn.bindings I)) ->
-                      ChorTEnv.MapsTo A x tau1 G -> ChorTEnv.MapsTo A x tau1 (ChorTEnv.add B y tau2 G))
+                      ChorEnv.MapsTo A x tau1 G -> ChorEnv.MapsTo A x tau1 (ChorEnv.add B y tau2 G))
 .
 Proof.
 Admitted.
 
-Lemma wt_subst_bang : forall tau G D A x v C,
-    WellTyped G D C ->
+
+Lemma add_MapsTo : forall A x (tau : A) m,
+  Var.Map.MapsTo x tau m ->
+  Var.Map.Equal (Var.Map.add x tau m) m.
+Admitted.
+Require Import Setoid.
+
+Lemma wt_subst_bang : forall tau G D T A x v C,
+    WellTyped G D T C ->
     Expr.Val v ->
-    Expr.WellTyped (Var.Map.empty _) (Var.Map.empty _) v (Expr.BANG tau) ->
-    ChorTEnv.MapsTo A x tau G ->
-               WellTyped G D (Choreography.subst A x v C).
+    Expr.WellTyped (Var.Map.empty _) (Var.Map.empty _) (Var.Map.empty _) v (Expr.BANG tau) ->
+    ChorEnv.MapsTo A x tau G ->
+               WellTyped G D T (Choreography.subst A x v C).
 Proof.
-  intros tau G D A x v C HWT HV HWTV HA.
+  intros tau G D T A x v C HWT HV HWTV HA.
   induction HWT.
 
-  - apply Nil. auto.
+  - apply Nil; auto.
 
-  - apply EPR.
-
-    auto.
+  - apply EPR; auto.
 
     fold Choreography.subst.
     destruct (Insn.rebound_in A x (Insn.EPR A0 x0 B y)).
     { auto. }
     { apply IHHWT. auto. }
+  
+  - eapply Send; eauto.
+
+    + (* v must be of the form !e *)
+      inversion HWTV; subst; inversion HV; subst.
+      Var.Map.Tactics.vsimpl.
+      destruct (Actor.FSet.MF.eq_dec A A0) eqn:Heq; subst; eauto.
+      { (* A = A0 *)
+        eapply Expr.wt_subst_bang; eauto.
+        setoid_replace (Var.Map.add x tau (ChorEnv.find A0 G))
+                with   (ChorEnv.find A0 G);
+                auto.
+        {
+          intros z. autorewrite with var_db.
+          Var.Map.Tactics.reduce_eq_dec; auto.
+          symmetry; apply Var.Map.find_1; auto.
+        }
+      }
     
-    auto.
+    + fold Choreography.subst.
+      destruct (Insn.rebound_in A x (Insn.Send A0 e B y)) eqn:Heq.
+      { eapply HWT. }
+      {
+        apply IHHWT.
+        pose proof (no_capture_add A x tau (Insn.Send A0 e B y) G) as HNCA.
+        specialize (HNCA Heq B y tau0).
+        apply HNCA.
+        unfold Insn.bindings.
+        simpl.
+        auto.
+        auto.
+      }
+
+  - eapply LetBang; eauto.
+
+    + Actor.Map.Tactics.compare A A0; eauto.
+      {
+        eapply Expr.wt_subst_bang; eauto.
+        setoid_replace (Var.Map.add x tau (ChorEnv.find A G))
+                with   (ChorEnv.find A G);
+                auto.
+        {
+          intros z. autorewrite with var_db.
+          Var.Map.Tactics.reduce_eq_dec; auto.
+          symmetry; apply Var.Map.find_1; auto.
+        }
+      }
+
+    + fold Choreography.subst.
+      destruct (Insn.rebound_in A x (Insn.LetBang A0 x0 e)) eqn:Heq.
+      { eapply HWT. }
+      {
+        apply IHHWT.
+        pose proof (no_capture_add A x tau (Insn.LetBang A0 x0 e) G) as HNCA.
+        specialize (HNCA Heq A0 x0 tau0).
+        apply HNCA.
+        unfold Insn.bindings.
+        simpl.
+        auto.
+        auto.
+      }
+
+  - eapply LetIn; eauto.
+
+    + Actor.Map.Tactics.compare A A0; eauto.
+      eapply Expr.wt_subst_bang; eauto.
+       setoid_replace (Var.Map.add x tau (ChorEnv.find A G))
+                with   (ChorEnv.find A G);
+                auto.
+        {
+          intros z. autorewrite with var_db.
+          Var.Map.Tactics.reduce_eq_dec; auto.
+          symmetry; apply Var.Map.find_1; auto.
+        }
+
+    + 
+      fold Choreography.subst.
+      destruct (Insn.rebound_in A x (Insn.Let A0 x0 e)) eqn:Heq.
+      { eapply HWT. }
+      {
+        apply IHHWT.
+        auto.
+      }
+      
+
+  - eapply LetPair; eauto.
     
-    auto. 
-
-  - eapply Send.
-
-    apply H.
-    destruct (Actor.eq_dec A A0) eqn:Heq.
-    {
-      pose proof (Expr.wt_subst_bang tau (ChorTEnv.find A0 G) DeltaA1 x v e (Expr.BANG tau0)) as HEWTS.
-      apply HEWTS; auto.
-      rewrite <- e0.
-      rewrite <- extension.
-      auto.
-    }
-    { auto. }
+    + Actor.Map.Tactics.compare A A0; eauto.
     
-    fold Choreography.subst.
-    destruct (Insn.rebound_in A x (Insn.Send A0 e B y)) eqn:Heq.
-    { eapply HWT. }
-    {
-      apply IHHWT.
-      pose proof (no_capture_add A x tau (Insn.Send A0 e B y) G) as HNCA.
-      specialize (HNCA Heq B y tau0).
-      apply HNCA.
-      unfold Insn.bindings.
-      simpl.
-      auto.
-      auto.
-    }
+      {
+        pose proof (Expr.wt_subst_bang tau (ChorEnv.find A G) DeltaA1 ThetaA1 x v e (Expr.Tensor tau1 tau2)) as HEWTS.
+          eapply HEWTS.
+        { auto. }
+        { apply Expr.weakening; auto. }
+        { rewrite add_MapsTo; eauto. }
+      }
+    + fold Choreography.subst.
+      destruct (Insn.rebound_in A x (Insn.LetPair A0 x1 x2 e)) eqn:Heq;
+        eauto.
 
-    eauto.
-
-  - eapply LetBang.
-
-    destruct (Actor.eq_dec A A0) eqn:Heq.
-    {
-      pose proof (Expr.wt_subst_bang tau (ChorTEnv.find A0 G) DeltaA1 x v e (Expr.BANG tau0)) as HEWTS.
-      eapply HEWTS.
-      auto.
-      auto.
-      auto.
-      auto.
-      rewrite <- extension.
-      rewrite <- e0.
-      auto.
-    }
-    { auto. }
-    
-    fold Choreography.subst.
-    destruct (Insn.rebound_in A x (Insn.LetBang A0 x0 e)) eqn:Heq.
-    { eapply HWT. }
-    {
-      apply IHHWT.
-      pose proof (no_capture_add A x tau (Insn.LetBang A0 x0 e) G) as HNCA.
-      specialize (HNCA Heq A0 x0 tau0).
-      apply HNCA.
-      unfold Insn.bindings.
-      simpl.
-      auto.
-      auto.
-    }
-
-    eauto.
-
-  - eapply LetIn.
-
-    destruct (Actor.eq_dec A A0) eqn:Heq.
-
-    {
-      pose proof (Expr.wt_subst_bang tau (ChorTEnv.find A0 G) DeltaA1 x v e tau0) as HEWTS.
-      eapply HEWTS.
-      auto.
-      auto.
-      auto.
-      auto.
-      rewrite <- e0.
-      rewrite <- extension.
-      auto.
-    }
-    { auto. }
-
-    fold Choreography.subst.
-    destruct (Insn.rebound_in A x (Insn.Let A0 x0 e)) eqn:Heq.
-    { eapply HWT. }
-    {
-      apply IHHWT.
-      auto.
-    }
-    
-    auto.
-    auto.
-
-  - eapply LetPair.
-    
-    destruct (Actor.eq_dec A A0) eqn:Heq.
-    {
-      pose proof (Expr.wt_subst_bang tau (ChorTEnv.find A0 G) DeltaA1 x v e (Expr.Tensor tau1 tau2)) as HEWTS.
-      eapply HEWTS.
-      auto.
-      auto.
-      auto.
-      rewrite <- extension.
-      rewrite <- e0.
-      auto.
-    }      
-    { auto. }
-
-    fold Choreography.subst.
-    destruct (Insn.rebound_in A x (Insn.LetPair A0 x1 x2 e)) eqn:Heq.
-    { eauto. }
-    {
-      eapply IHHWT.
-      auto.
-    }
-    
-    auto.
-    auto.
-    auto.
 Qed.
     
     
-Lemma wt_subst_lin : forall tau G D A x v C,
-    WellTyped G D C ->
+Lemma wt_subst_lin : forall ThetaA1 ThetaA2 tau G D T A x v C,
+    WellTyped G D (Actor.Map.add A ThetaA2 T) C ->
     Expr.Val v ->
-    Expr.WellTyped (Var.Map.empty _) (Var.Map.empty _) v tau ->
-    ChorTEnv.MapsTo A x tau D ->
-    WellTyped G (Actor.Map.add A (Var.Map.remove x (ChorTEnv.find A D)) D) (Choreography.subst A x v C).
+    Expr.WellTyped (Var.Map.empty _) (Var.Map.empty _) ThetaA1 v tau ->
+
+    ChorEnv.MapsTo A x tau D ->
+    Var.Map.Partition (ChorEnv.find A T) ThetaA1 ThetaA2 ->
+
+    WellTyped G D T (Choreography.subst A x v C).
 Proof.
   Admitted.
   
 (* placeholder for well-formedness definition *)
-Definition  WellFormed (cfg : Config.t) (C : ChorTEnv.t) : Prop := True.
+Definition  WellFormed (cfg : Config.t) (C : ChorEnv.t nat) : Prop := True.
 
-Theorem preservation : forall C1 cfg1 l C2 cfg2,
-  step (C1, cfg1) l (C2,cfg2) ->
-  forall D1,
-  WellFormed cfg1 D1 ->
-  WellTyped (Actor.Map.empty _) D1 C1 ->
-  exists D2,
-  WellFormed cfg2 D2 /\ WellTyped (Actor.Map.empty _) D2 C2.
+Theorem preservation : forall C1 T1 cfg1 l C2 T2 cfg2,
+  step C1 T1 cfg1 l C2 T2 cfg2 ->
+  WellFormed cfg1 T1 ->
+  WellTyped (Actor.Map.empty _) (Actor.Map.empty _) T1 C1 ->
+  WellFormed cfg2 T2 /\ WellTyped (Actor.Map.empty _) (Actor.Map.empty _) T2 C2.
 Proof.
 Admitted.
