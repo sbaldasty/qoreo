@@ -445,7 +445,7 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
 
         | [ |- Disjoint _ (concat _ _)] =>
           apply concat_disjoint; split
-        | [ |- Disjoint _ (concat _ _)] =>
+        | [ |- Disjoint (concat _ _) _] =>
           apply disjoint_sym; apply concat_disjoint; split; apply disjoint_sym
         | [ H : Disjoint _ (concat _ _) |- _ ] =>
           apply concat_disjoint in H;
@@ -780,7 +780,12 @@ Module Var.
   #[global] Hint Rewrite Map.Properties.F.add_o : var_db.
   #[global] Hint Rewrite Map.Properties.F.empty_o : var_db.
   #[global] Hint Rewrite Map.Properties.F.map_in_iff : var_db.
+  #[global] Hint Rewrite Map.Properties.F.remove_in_iff : var_db.
+
   #[global] Existing Instance Map.Proofs.singletonProper.
+  #[global] Existing Instance Map.Proofs.concatProper.
+  #[global] Existing Instance Map.Proofs.domainProper.
+
   #[global] Hint Resolve Map.empty_1 : var_db.
   #[global] Hint Resolve Map.Properties.Partition_sym : var_db.
   #[global] Hint Rewrite Map.Proofs.concat_find : var_db.
@@ -987,7 +992,12 @@ Module Actor.
   #[global] Hint Rewrite Map.Properties.F.map_in_iff : actor_db.
   #[global] Hint Resolve Map.empty_1 : actor_db.
   #[global] Hint Resolve Map.Properties.Partition_sym : actor_db.
+  #[global] Hint Rewrite Map.Properties.F.remove_in_iff : var_db.
+
   #[global] Existing Instance Map.Proofs.singletonProper.
+  #[global] Existing Instance Map.Proofs.concatProper.
+  #[global] Existing Instance Map.Proofs.domainProper.
+
   #[global] Hint Rewrite Map.Proofs.concat_find : actor_db.
   #[global] Hint Rewrite Map.Proofs.concat_in : actor_db.
   #[global] Hint Rewrite @Map.Proofs.map_concat : actor_db.

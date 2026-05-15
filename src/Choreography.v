@@ -383,7 +383,10 @@ Proof.
   
   - eapply Send; eauto.
 
-    + destruct (Actor.FSet.MF.eq_dec A A0) eqn:Heq; subst; eauto.
+    + (* v must be of the form !e *)
+      inversion HWTV; subst; inversion HV; subst.
+      Var.Map.Tactics.vsimpl.
+      destruct (Actor.FSet.MF.eq_dec A A0) eqn:Heq; subst; eauto.
       {
         eapply Expr.wt_subst_bang; eauto.
         apply Expr.weakening; eauto.
@@ -392,6 +395,7 @@ Proof.
         intros z. autorewrite with var_db.
         Var.Map.Tactics.compare x z; auto.
         unfold ChorEnv.MapsTo in HA.
+        apply Var.Map.Properties.F.find_mapsto_iff in HA.
         symmetry;
           rewrite <- Var.Map.Properties.F.find_mapsto_iff;
           auto.
