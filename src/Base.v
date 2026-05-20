@@ -228,6 +228,27 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
   Qed.
   #[local] Hint Rewrite remove_add : qoreo_db.
 
+
+  Lemma add_remove_eq : forall A x (a : A) m,
+    M.Equal (M.add x a (M.remove x m))
+                  (M.add x a m).
+  Admitted.
+  #[local] Hint Rewrite add_remove_eq : var_db.
+
+  Lemma add_mapsto : forall A x (a : A) m,
+    M.MapsTo x a m ->
+    M.Equal (M.add x a m)
+                  m.
+  Admitted.
+  #[local] Hint Resolve add_mapsto : var_db.
+
+
+  Lemma add_neq_sym : forall A x y (a b : A) m,
+  x <> y ->
+  M.Equal (M.add x a (M.add y b m))
+          (M.add y b (M.add x a m)).
+  Admitted.
+
   Lemma remove_empty : forall A x,
     M.Equal (M.remove x (@M.empty A))
       (@M.empty A).
@@ -284,6 +305,10 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
   Qed.
   #[local] Hint Rewrite @empty_map_empty : qoreo_db.
 
+  Lemma add_not_Empty : forall A x (a : A) m,
+    ~ M.Empty (M.add x a m).
+  Admitted.
+
   Lemma singleton_singleton : forall A x (a : A),
     Singleton x a (M.add x a (M.empty _)).
   Proof.
@@ -305,6 +330,11 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
     apply M.empty_1.
   Qed.
   #[local] Hint Resolve @singleton_remove : qoreo_db.
+
+  Lemma singleton_add_inversion : forall A x (a : A) y b m,
+    Singleton x a (M.add y b m) ->
+    x = y /\ a = b /\ M.Empty m.
+  Admitted.
 
   Ltac subst_eq_hypothesis_fwd m :=
     repeat match goal with
@@ -348,6 +378,8 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
 
   Ltac simpl_Empty :=
       match goal with
+      | [ H : M.Empty (M.add _ _ _) |- _ ] =>
+        exfalso; apply (add_not_Empty _ _ _ _ H)
       | [ H : M.Empty (M.map _ _) |- _ ] =>
         apply empty_map_Empty in H
       | [ |- M.Empty (M.map _ _) ] =>
@@ -359,6 +391,15 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
         apply empty_map_equal in H;
         subst_map
       end.
+
+  Ltac simpl_Singleton :=
+    match goal with
+    | [ H : Singleton _ _ (M.add _ _ _) |- _ ] =>
+      apply singleton_add_inversion in H;
+      destruct H as [? [? ?]]; subst
+    | [ |- Singleton ?x _ (M.add ?a _ (M.empty _)) ] =>
+      apply singleton_singleton
+    end.
 
   (** Lemmas about disjointness *)
 
@@ -664,6 +705,25 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       M.Equal m m0.
   Admitted.
 
+  Lemma partition_add_inversion : forall A (a : A) x m m1 m2,
+    Partition (M.add x a m) m1 m2 ->
+    ~ M.In x m ->
+    (M.MapsTo x a m1 /\ ~ M.In x m2 /\ Partition m (M.remove x m1) m2)
+    \/
+    (~ M.In x m1 /\ M.MapsTo x a m2 /\ Partition m m1 (M.remove x m2)).
+  Admitted.
+
+  Ltac decide_equal :=
+    repeat match goal with
+    | [ H : M.MapsTo ?x ?a ?m |- Some ?a = M.find ?x ?m ] =>
+      symmetry; apply M.find_1; auto
+    | [ H : M.MapsTo ?x ?a ?m |- M.find ?x ?m = Some ?a ] =>
+      apply M.find_1; auto
+    | [ |- M.Equal _ _ ] =>
+      intros z; autorewrite with var_db;
+      repeat reduce_eq_dec; auto with var_db
+    end; fail.
+
   Ltac reduce_partition :=
     match goal with
 
@@ -684,6 +744,11 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       | [ H : Partition ?m ?m0 (M.empty _) |- _ ] =>
         apply partition_empty2_eq in H;
         subst_map
+
+      (* partitions with add *)
+      | [ H : Partition (M.add _ _ _) _ _ |- _ ] =>
+        apply partition_add_inversion in H; auto;
+        try destruct H as [[? [? ?]] | [? [? ?]]]
 
       (* Partitions with remove *)
       | [ |- Partition (M.remove ?x _) (M.remove ?x _) (M.remove ?x _) ] =>
@@ -710,6 +775,9 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
   | [ |- M.Empty _ ] => simpl_Empty
   | [ H : M.Empty _ |- _ ] => simpl_Empty
 
+  | [ |- Singleton _ _ _ ] => simpl_Singleton
+  | [ H : Singleton _ _ _ |- _ ] => simpl_Singleton
+
   | [ |- Disjoint _ _ ] => reduce_disjoint
   | [ H : Disjoint _ _ |- _ ] => reduce_disjoint
 
@@ -720,6 +788,40 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
 
   | [ H : M.Equal _ _ |- _ ] => subst_map
   end.
+
+
+
+  (* move m to the left-most element of the concatenation list *)
+  Ltac reduce_concat :=
+    repeat match goal with
+    | [ |- M.Equal (concat ?m _) (concat ?m _)] =>
+      apply concatProper; try reflexivity
+    | [ |- M.Equal (concat ?m _) (concat ?m0 ?m1)] =>
+      rewrite (concat_sym m0 m1);
+        [ | auto with var_db; vsimpl; auto with var_db ];
+      repeat rewrite <- concat_assoc
+    end.
+
+  Ltac partition_concat :=
+    match goal with
+    | [ |- Partition (concat ?m1 ?m2) ?m1 _ ] =>
+      reflect_partition;
+        [ | reflexivity];
+        vsimpl; auto with var_db
+
+    | [ |- Partition (concat ?m1 ?m2) ?m2 _ ] =>
+      reflect_partition;
+        [ | rewrite (concat_sym m1 m2); auto;
+            try reflexivity];
+        vsimpl; auto with var_db
+
+    | [ |- Partition _ (concat _ _) _ ] =>
+      reflect_partition; vsimpl; auto with var_db
+    | [ |- Partition _ _ (concat _ _) ] =>
+      reflect_partition; vsimpl; auto with var_db
+    end;
+    reduce_concat.
+
   End Proofs.
 
 
@@ -731,6 +833,9 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       * subst_map         - eliminates hypotheses of the form Map.Equal m1 m2 by rewriting
       * reflect_partition - converts Partition hypotheses into Disjoint + Map.Equal (concat) form
       * vsimpl            - simplifies hypotheses and goals that use maps
+
+      * decide_equal - tries to prove goals of the form Equal m1 m2 through brute-force reasoning 
+      * partition_concat  - simplifies goals specifically that deal with the intersection of partition and concatenation
 
     vsimpl builds on the following tactics in MapFacts:
       * simpl_Empty       - simplifies Map.Empty goals/hypotheses and substitutes
@@ -746,6 +851,8 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
     Ltac subst_map := Proofs.subst_map.
     Ltac reflect_partition := Proofs.reflect_partition.
     Ltac vsimpl := Proofs.vsimpl.
+    Ltac partition_concat := Proofs.partition_concat.
+    Ltac decide_equal := Proofs.decide_equal.
   End Tactics.
 
 End FMap_fun.
@@ -771,6 +878,12 @@ Module Var.
     let f := fun x _ z_fresh => if Nat.leb z_fresh x then (x+1)%nat else z_fresh in
     Map.fold f m 0%nat.
 
+  Ltac simplify :=
+    autorewrite with var_db;
+      Map.Tactics.vsimpl;
+      try (intuition; fail).
+
+
   (* Global var_db hints: instantiations of FMap_fun's local qoreo_db hints for Var.Map *)
   #[global] Hint Rewrite Map.Properties.F.add_mapsto_iff : var_db.
   #[global] Hint Rewrite Map.Properties.F.empty_mapsto_iff : var_db.
@@ -786,8 +899,6 @@ Module Var.
   #[global] Existing Instance Map.Proofs.concatProper.
   #[global] Existing Instance Map.Proofs.domainProper.
 
-  #[global] Hint Resolve Map.empty_1 : var_db.
-  #[global] Hint Resolve Map.Properties.Partition_sym : var_db.
   #[global] Hint Rewrite Map.Proofs.concat_find : var_db.
   #[global] Hint Rewrite Map.Proofs.concat_in : var_db.
   #[global] Hint Rewrite @Map.Proofs.map_concat : var_db.
@@ -798,14 +909,27 @@ Module Var.
   #[global] Hint Rewrite @Map.Proofs.map_add : var_db.
   #[global] Hint Resolve @Map.Proofs.empty_map_equal : var_db.
   #[global] Hint Rewrite @Map.Proofs.empty_map_empty : var_db.
-  #[global] Hint Resolve @Map.Proofs.singleton_remove : var_db.
   #[global] Hint Rewrite @Map.Proofs.concat_disjoint : var_db.
+  #[global] Hint Rewrite Map.Proofs.add_remove_eq : var_db.
+
+
+  (* separate out more expensive resolves into extra_var_db *)
+  #[global] Hint Resolve Map.empty_1 : var_db.  
+  #[global] Hint Resolve Map.Properties.Partition_sym : extra_var_db.
+  #[global] Hint Resolve @Map.Proofs.singleton_remove : var_db.
+  #[global] Hint Resolve Map.Proofs.add_mapsto : extra_var_db.
   #[global] Hint Resolve Map.Proofs.disjoint_empty_1 Map.Proofs.disjoint_empty_2 : var_db.
   #[global] Hint Resolve Map.Proofs.partition_empty_l : var_db.
   #[global] Hint Resolve Map.Proofs.partition_empty_r : var_db.
+  #[global] Hint Resolve Map.M.remove_1 : var_db.
+  #[global] Hint Resolve Map.Proofs.disjoint_sym : extra_var_db.
+  #[global] Hint Resolve Map.Proofs.concat_assoc : extra_var_db.
 
+  #[global] Hint Extern 4 (Map.Partition (Map.concat _ _) _ _) => Map.Proofs.partition_concat : extra_var_db.
+  #[global] Hint Extern 4 (Map.Partition _ (Map.concat _ _) _) => Map.Tactics.partition_concat : extra_var_db.
+  #[global] Hint Extern 4 (Map.Partition _ _ (Map.concat _ _)) => Map.Tactics.partition_concat : extra_var_db.
 
-  #[global] Hint Rewrite  Map.FSetProperties.inter_iff : var_db.
+  #[global] Hint Rewrite Map.FSetProperties.inter_iff : var_db.
   #[global] Hint Rewrite Map.MProofs.FSetProperties.add_iff: var_db.
   #[global] Hint Rewrite Map.FSetProperties.singleton_iff : var_db.
 
@@ -979,8 +1103,13 @@ Module Actor.
   Module Map := FMap(V).
   Module FSet := Map.S.
 
-(*  #[global] Existing Instance MapProofs.F.EqualSetoid.*)
+  Ltac simplify :=
+    autorewrite with actor_db;
+    Map.Tactics.vsimpl;
+    try (intuition; fail).
 
+(*  #[global] Existing Instance MapProofs.F.EqualSetoid.*)
+  
   (* Global actor_db hints: instantiations of FMap_fun's local qoreo_db hints for Actor.Map *)
   #[global] Hint Rewrite Map.Properties.F.add_mapsto_iff : actor_db.
   #[global] Hint Rewrite Map.Properties.F.empty_mapsto_iff : actor_db.
@@ -1010,9 +1139,19 @@ Module Actor.
   #[global] Hint Rewrite @Map.Proofs.empty_map_empty : actor_db.
   #[global] Hint Resolve @Map.Proofs.singleton_remove : actor_db.
   #[global] Hint Rewrite @Map.Proofs.concat_disjoint : actor_db.
+  #[global] Hint Rewrite Map.Proofs.add_remove_eq : actor_db.
+
+  #[global] Hint Resolve Map.Proofs.add_mapsto : actor_db.
   #[global] Hint Resolve Map.Proofs.disjoint_empty_1 Map.Proofs.disjoint_empty_2 : actor_db.
   #[global] Hint Resolve Map.Proofs.partition_empty_l : actor_db.
   #[global] Hint Resolve Map.Proofs.partition_empty_r : actor_db.
+  #[global] Hint Resolve Map.M.remove_1 : actor_db.
+  #[global] Hint Resolve Map.Proofs.disjoint_sym : actor_db.
+  #[global] Hint Resolve Map.Proofs.concat_assoc : actor_db.
+
+  #[global] Hint Extern 4 (Map.Partition (Map.concat _ _) _ _) => Map.Proofs.partition_concat : actor_db.
+  #[global] Hint Extern 4 (Map.Partition _ (Map.concat _ _) _) => Map.Tactics.partition_concat : actor_db.
+  #[global] Hint Extern 4 (Map.Partition _ _ (Map.concat _ _)) => Map.Tactics.partition_concat : actor_db.
 
   #[global] Hint Rewrite Map.FSetProperties.inter_iff : actor_db.
   #[global] Hint Rewrite Map.MProofs.FSetProperties.add_iff: actor_db.

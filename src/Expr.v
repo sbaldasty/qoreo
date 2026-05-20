@@ -1,6 +1,7 @@
 From Stdlib Require Import FSets.FMapList FSets.FSetList FSets.FMapFacts OrderedType OrderedTypeEx.
 From QuantumLib Require Import Matrix Pad Quantum.
 From Qoreo Require Import Base.
+Import Var.Map.Tactics.
 
 
 Open Scope qoreo.
@@ -22,74 +23,6 @@ Inductive t :=
 | Fix : Var.t -> Var.t -> t -> t
 | App : t -> t -> t
 .
-
-(*
-Inductive WFRefs : Var.Map.t nat -> Expr.t -> Prop :=
-| WFVar : forall refs x,
-  Var.Map.Empty refs ->
-  WFRefs refs (Var x)
-| WFLetIn : forall refs x e1 e2 refs1 refs2,
-  WFRefs refs1 e1 ->
-  WFRefs refs2 e2 ->
-  Var.Map.Partition refs refs1 refs2 ->
-  WFRefs refs (LetIn x e1 e2)
-| WFBang : forall refs e,
-  WFRefs refs e ->
-  WFRefs refs (Bang e)
-| WFLetBang : forall refs x e1 e2 refs1 refs2,
-  WFRefs refs1 e1 ->
-  WFRefs refs2 e2 ->
-  Var.Map.Partition refs refs1 refs2 ->
-  WFRefs refs (LetBang x e1 e2)
-| WFBit : forall refs b,
-  Var.Map.Empty refs ->
-  WFRefs refs (Bit b)
-
-| WFIf : forall refs' refs'' refs e e1 e2,
-
-  WFRefs refs' e ->
-  WFRefs refs'' e1 ->
-  WFRefs refs'' e2 ->
-
-  Var.Map.Partition refs refs' refs'' ->
-  WFRefs refs (If e e1 e2)
-
-| WFPair : forall refs e1 e2 refs1 refs2,
-  WFRefs refs1 e1 ->
-  WFRefs refs2 e2 ->
-  Var.Map.Partition refs refs1 refs2 ->
-  WFRefs refs (Pair e1 e2)
-| WFLetPair : forall refs x1 x2 e1 e2 refs1 refs2,
-  WFRefs refs1 e1 ->
-  WFRefs refs2 e2 ->
-  Var.Map.Partition refs refs1 refs2 ->
-  WFRefs refs (LetPair x1 x2 e1 e2)
-| WFMeas : forall refs e,
-  WFRefs refs e ->
-  WFRefs refs (Meas e)
-(*| WFQRef : forall refs x q,
-  Var.Map.Singleton x q refs ->
-  WFRefs refs (QRef x)
-  *)
-| WFNew : forall refs e,
-  WFRefs refs e ->
-  WFRefs refs (New e)
-| WFUnitary : forall refs u e,
-  WFRefs refs e ->
-  WFRefs refs (Unitary u e)
-| WFLambda : forall refs x e,
-  WFRefs refs e ->
-  WFRefs refs (Lambda x e)
-| WFFix : forall refs f x e,
-  WFRefs refs e ->
-  WFRefs refs (Fix f x e)
-| WFApp : forall refs e1 e2 refs1 refs2,
-  WFRefs refs1 e1 ->
-  WFRefs refs2 e2 ->
-  Var.Map.Partition refs refs1 refs2 ->
-  WFRefs refs (App e1 e2)
-.
-*)
 
 Inductive Val : t -> Prop :=
 | QRefVal : forall q,
@@ -345,109 +278,6 @@ Inductive step : Expr.t -> Var.Map.t nat -> Config.t -> Expr.t -> Var.Map.t nat 
        (Pair (QRef q1) (QRef q2)) refs cfg'
 .
 
-(*
-Lemma wfrefs_val : forall refs v,
-  Val refs v ->
-  WFRefs refs v.
-Proof.
-  intros ? ? Hval.
-  induction Hval; econstructor; eauto.
-Qed.
-Hint Resolve wfrefs_val : qoreo_db.
-Hint Constructors WFRefs : qoreo_db.
-*)
-(*
-*)
-
-(*
-Lemma wfrefs_step : forall e refs cfg e' refs' cfg',
-  step e refs cfg e' refs' cfg' ->
-  WFRefs refs e.
-Proof.
-  intros ? ? ? ? ? ? Hstep.
-  induction Hstep;
-    eauto with qoreo_db var_db.
-  * econstructor.
-    econstructor; eauto with qoreo_db var_db.
-    rewrite H.
-    auto with var_db.
-Qed.
-
-(* need to add the typing judgment to this to make sure it actually gets substituted correctly....... this lemma is not correct as stated 
-and then what about the bang substitution.... it should indeed be the case that there are no qrefs in bang...*)
-Lemma wfrefs_subst : forall refs1 refs2 refs x v1 e2,
-  Val refs1 v1 ->
-  WFRefs refs2 e2 ->
-  Var.Map.Partition refs refs1 refs2 ->
-  WFRefs refs (subst x v1 e2).
-Admitted.
-*)
-
-
-
-
-
-
-
-
-(*Hint Rewrite var_remove_map : var_db.*)
-
-
-(* If map _ refs == Δ1 + Δ2 
-  Then there exist refs1 and refs2 such that
-    Δ1=map _ refs1 /\ Δ2 = map _ refs2
-  such that refs == refs1 + refs2
-*)
-
-
-    
-
-(*
-Lemma wfrefs_step_r : forall e refs cfg e' refs' cfg',
-  step e refs cfg e' refs' cfg' ->
-  WFRefs refs' e'.
-Proof.
-  intros ? ? ? ? ? ? Hstep.
-  induction Hstep; subst; eauto with qoreo_db var_db.
-  * eapply wfrefs_subst; eauto.
-  * eapply wfrefs_subst; eauto.
-    constructor; auto.
-  * destruct b; auto.
-  * inversion H; subst; clear H.
-    eapply wfrefs_subst; eauto.
-    eapply wfrefs_subst; eauto.
-    admit (* true *) .
-    admit (* true *).
-  * eapply wfrefs_subst; eauto. admit (* symmetry *).
-  * eapply wfrefs_subst; eauto.
-    eapply wfrefs_subst; eauto.
-    { constructor; eauto. }
-    admit (* wrong? *).
-    admit (* symmetry *).
-  * unfold Config.new in *.
-    inversion H0; subst; clear H0.
-    econstructor.
-    unfold Var.Map.Singleton.
-    assert (Var.Map.Equal refs (Var.Map.empty nat))
-      by (vsimpl; reflexivity).
-    admit (* not sure why this isn't going through *).
-    
-  * inversion H0; subst; clear H0.
-    constructor. constructor.
-    unfold Var.Map.Singleton in *.
-    rewrite H.
-    autorewrite with var_db.
-    vsimpl.
-  * econstructor.
-    { econstructor. unfold Var.Map.Singleton. reflexivity. }
-    { econstructor. unfold Var.Map.Singleton. reflexivity. }
-    rewrite H. eauto with var_db.
-  Unshelve.
-  + apply Var.Map.empty.
-  + apply Var.Map.empty.
-  + exact 0%nat.
-Admitted. 
-*)
 
 (*
 Fixpoint qrefs (e : Expr.t) : Var.FSet.t :=
@@ -470,96 +300,6 @@ Fixpoint qrefs (e : Expr.t) : Var.FSet.t :=
   end.
 *)
 
-(*
-Lemma scope_preservation : forall e refs cfg e' refs' cfg',
-  step e refs cfg e' refs' cfg' ->
-  WFRefs refs cfg e ->
-  WFRefs refs' cfg' e'.
-Proof.
-  intros ? ? ? ? ? ? Hstep.
-  induction Hstep; inversion 1; subst.
-  * econstructor; eauto.
-    apply IHHstep; auto. 
-
-
-(* WFConfig S e: the set of all QRefs in expression e is exactly S *)
-Inductive WFConfig : Config.t -> Expr.t -> Prop :=
-| QRVar : forall cfg x,
-  Config.Refs.Empty cfg ->
-  WFConfig cfg (Var x)
-
-| QRQRef : forall cfg x,
-  Config.Refs.Singleton x cfg ->
-  WFConfig cfg (QRef x)
-
-| QRLetIn : forall x e1 e2 cfg cfg1 cfg2,
-  WFConfig cfg1 e1 ->
-  WFConfig cfg2 e2 ->
-  Config.Refs.Partition cfg cfg1 cfg2 ->
-  WFConfig cfg (LetIn x e1 e2)
-
-| QRBang : forall e cfg,
-  WFConfig cfg e ->
-  WFConfig cfg (Bang e)
-
-| QRLetBang : forall x e1 e2 cfg cfg1 cfg2,
-  WFConfig cfg1 e1 ->
-  WFConfig cfg2 e2 ->
-  Config.Refs.Partition cfg cfg1 cfg2 ->
-  WFConfig cfg (LetBang x e1 e2)
-
-| QRBit : forall b cfg,
-  Config.Refs.Empty cfg ->
-  WFConfig cfg (Bit b)
-
-| QRIf : forall e e1 e2 cfg cfg' cfg'',
-  WFConfig cfg' e ->
-  WFConfig cfg'' e1 ->
-  WFConfig cfg'' e2 ->
-  Config.Refs.Partition cfg cfg' cfg'' ->
-  WFConfig cfg (If e e1 e2)
-
-| QRPair : forall e1 e2 cfg cfg1 cfg2,
-  WFConfig cfg1 e1 ->
-  WFConfig cfg2 e2 ->
-  Config.Refs.Partition cfg cfg1 cfg2 ->
-  WFConfig cfg (Pair e1 e2)
-
-| QRLetPair : forall x1 x2 e1 e2 cfg cfg1 cfg2,
-  WFConfig cfg1 e1 ->
-  WFConfig cfg2 e2 ->
-  Config.Refs.Partition cfg cfg1 cfg2 ->
-  WFConfig cfg (LetPair x1 x2 e1 e2)
-
-| QRMeas : forall e cfg,
-  WFConfig cfg e ->
-  WFConfig cfg (Meas e)
-
-| QRNew : forall e cfg,
-  WFConfig cfg e ->
-  WFConfig cfg (New e)
-
-| QRUnitary : forall u e cfg,
-  WFConfig cfg e ->
-  WFConfig cfg (Unitary u e)
-
-| QRLambda : forall x e cfg,
-  WFConfig cfg e ->
-  WFConfig cfg (Lambda x e)
-
-| QRFix : forall f x e cfg,
-  WFConfig cfg e ->
-  WFConfig cfg (Fix f x e)
-
-| QRApp : forall e1 e2 cfg cfg1 cfg2,
-  WFConfig cfg1 e1 ->
-  WFConfig cfg2 e2 ->
-  Config.Refs.Partition cfg cfg1 cfg2 ->
-  WFConfig cfg (App e1 e2)
-.
-
-*)
-  
 
 
 (*********)
@@ -802,25 +542,12 @@ Proof.
   contradiction.
 Qed.
 
-Import Var.Map.Tactics.
-
-
 Lemma wt_subst_bang : forall τ Γ Δ Θ x v e τ',
   Val v ->
   WellTyped (Var.Map.empty _) (Var.Map.empty _) (Var.Map.empty _) v (BANG τ) ->
   WellTyped (Var.Map.add x τ Γ) Δ Θ e τ' ->
   WellTyped Γ Δ Θ (subst x v e) τ'.
 Proof.
-Admitted.
-
-
-(* could add this to tactics *)
-Lemma partition_add_inversion : forall A (a : A) x m m1 m2,
-  Var.Map.Partition (Var.Map.add x a m) m1 m2 ->
-  ~ Var.Map.In x m ->
-  (Var.Map.MapsTo x a m1 /\ ~ Var.Map.In x m2 /\ Var.Map.Partition m (Var.Map.remove x m1) m2)
-  \/
-  (~ Var.Map.In x m1 /\ Var.Map.MapsTo x a m2 /\ Var.Map.Partition m m1 (Var.Map.remove x m2)).
 Admitted.
 
 Lemma subst_not_in : forall x v e Γ Δ Θ τ,
@@ -831,99 +558,7 @@ Lemma subst_not_in : forall x v e Γ Δ Θ τ,
 Admitted.
 Hint Resolve subst_not_in : var_db.
 
-
-Lemma add_remove_eq : forall A x (a : A) m,
-  Var.Map.Equal (Var.Map.add x a (Var.Map.remove x m))
-                (Var.Map.add x a m).
-Admitted.
-#[global] Hint Rewrite add_remove_eq : var_db.
-
-
-
-Lemma add_mapsto : forall A x (a : A) m,
-  Var.Map.MapsTo x a m ->
-  Var.Map.Equal (Var.Map.add x a m)
-                m.
-Admitted.
-#[global] Hint Resolve add_mapsto : var_db.
-
-Lemma singleton_add_inversion : forall A x (a : A) y b m,
-  Var.Map.Singleton x a (Var.Map.add y b m) ->
-  x = y /\ a = b /\ Var.Map.Empty m.
-Admitted.
-
-
-Lemma add_not_Empty : forall A x (a : A) m,
-  ~ Var.Map.Empty (Var.Map.add x a m).
-Admitted.
-
-
-Ltac add_inversion :=
-    repeat match goal with
-    | [ H : Var.Map.Partition (Var.Map.add _ _ _) _ _ |- _ ] =>
-      apply partition_add_inversion in H; auto;
-      try destruct H as [[? [? ?]] | [? [? ?]]]
-    | [ H : Var.Map.Empty (Var.Map.add _ _ _) |- _ ] =>
-      exfalso; apply (add_not_Empty _ _ _ _ H)
-    | [ H : Var.Map.Singleton _ _ (Var.Map.add _ _ _) |- _ ] =>
-      apply singleton_add_inversion in H;
-      destruct H as [? [? ?]]; subst
-    end.
 #[global] Hint Resolve weakening : var_db.
-#[global] Hint Resolve Var.Map.M.remove_1 : var_db.
-#[global] Hint Resolve Var.Map.Proofs.disjoint_sym : var_db.
-#[global] Hint Resolve Var.Map.Proofs.concat_assoc : var_db.
-
-
-  (* move m to the left-most element of the concatenation list *)
-  Ltac reduce_concat :=
-    repeat match goal with
-    | [ |- Var.Map.Equal (Var.Map.concat ?m _) (Var.Map.concat ?m _)] =>
-      apply Var.Map.Proofs.concatProper; try reflexivity
-    | [ |- Var.Map.Equal (Var.Map.concat ?m _) (Var.Map.concat ?m0 ?m1)] =>
-      rewrite (Var.Map.Proofs.concat_sym m0 m1);
-        [ | auto with var_db; vsimpl; auto with var_db ];
-      repeat rewrite <- Var.Map.Proofs.concat_assoc
-    end.
-
-Ltac partition_concat :=
-  match goal with
-  | [ |- Var.Map.Partition (Var.Map.concat ?m1 ?m2) ?m1 _ ] =>
-    reflect_partition;
-      [ | reflexivity];
-      vsimpl; auto with var_db
-
-  | [ |- Var.Map.Partition (Var.Map.concat ?m1 ?m2) ?m2 _ ] =>
-    reflect_partition;
-      [ | rewrite (Var.Map.Proofs.concat_sym m1 m2); auto;
-          try reflexivity];
-      vsimpl; auto with var_db
-
-  | [ |- Var.Map.Partition _ (Var.Map.concat _ _) _ ] =>
-    reflect_partition; vsimpl; auto with var_db
-  | [ |- Var.Map.Partition _ _ (Var.Map.concat _ _) ] =>
-    reflect_partition; vsimpl; auto with var_db
-  end;
-  reduce_concat.
-Hint Extern 3 (Var.Map.Partition _ _ _) => partition_concat : var_db.
-
-
-
-Lemma add_neq_sym : forall A x y (a b : A) m,
-  x <> y ->
-  Var.Map.Equal (Var.Map.add x a (Var.Map.add y b m))
-                (Var.Map.add y b (Var.Map.add x a m)).
-Admitted.
-Ltac decide_equal :=
-  repeat match goal with
-  | [ H : Var.Map.MapsTo ?x ?a ?m |- Some ?a = Var.Map.find ?x ?m ] =>
-    symmetry; apply Var.Map.find_1; auto
-  | [ H : Var.Map.MapsTo ?x ?a ?m |- Var.Map.find ?x ?m = Some ?a ] =>
-    apply Var.Map.find_1; auto
-  | [ |- Var.Map.Equal _ _ ] =>
-    intros z; autorewrite with var_db;
-    repeat reduce_eq_dec; auto with var_db
-  end; fail.
 
 Lemma wt_disjoint : forall Γ Δ Θ e τ,
   WellTyped Γ Δ Θ e τ ->
@@ -945,35 +580,35 @@ Proof.
     intros ? ? ? ? ? ? ? ? ? Hval Hv He Hpart HΓ Hin;
     simpl.
   * (* Var *)
-    inversion He; subst; clear He.
-    2:{ add_inversion. }
-    add_inversion.
-    reduce_eq_dec.    
-    vsimpl; auto with var_db.
+    inversion He; subst; clear He;
+      Var.simplify.
+    reduce_eq_dec.
+    auto with var_db.    
 
   * (* LetIn *)
-    inversion He; subst; clear He.
-    add_inversion.
+    inversion He; subst; clear He;
+      Var.simplify.
     + (* x occcurs in Δ1 *)
-      simpl.
 
       setoid_replace (if Var.FSet.MF.eq_dec x t0 then e2 else subst x v e2)
         with e2.
       2:{
         compare x t0; auto.
-        eapply (subst_not_in x v e2); eauto.
-        autorewrite with var_db. intuition.
+        eapply (subst_not_in x v e2);
+          eauto;
+          Var.simplify.
       }
 
       (* Γ; Δ1-{x}; Θ1+Θ0 |- subst x v e1 : τ *)
       eapply (WTLetIn
                 (Var.Map.remove x Δ1) Δ2
                 (Var.Map.concat Θ1 Θ0) Θ3);
-        eauto with var_db.
-      eapply IHe1; eauto with var_db.
-      autorewrite with var_db.
-      setoid_replace (Var.Map.add x τ Δ1) with Δ1; auto with var_db.
-
+        eauto with extra_var_db.
+      eapply IHe1; eauto with var_db extra_var_db.
+      Var.simplify.
+      setoid_replace (Var.Map.add x τ Δ1) with Δ1;
+        auto with extra_var_db.
+      
     + (* x occurs in Δ2 *)
       rename t0 into y.
       simpl.
@@ -988,12 +623,12 @@ Proof.
       eapply (WTLetIn 
                 Δ1 (Var.Map.remove x Δ2)
                 Θ0 (Var.Map.concat Θ1 Θ3));
-        eauto.
-      2:{ autorewrite with var_db. intuition. }
-      2:{ partition_concat. }
+        eauto. (* if you use eauto with var_db here, it will hang *)
+      2:{ Var.simplify. }
+      2:{ auto with extra_var_db. }
       
-      eapply IHe2; eauto with var_db.
-      2:{ autorewrite with var_db. intuition. }
+      eapply IHe2; eauto with var_db extra_var_db.
+      2:{ Var.simplify. }
       setoid_replace
         (Var.Map.add x τ (Var.Map.add y τ0 (Var.Map.remove x Δ2)))
         with (Var.Map.add y τ0 Δ2)
@@ -1002,11 +637,12 @@ Proof.
 
   * (* Bang e *) 
     inversion He; subst; clear He.
-    add_inversion.
+    Var.simplify.
       
   * (* LetBang *)
-    inversion He; subst; clear He.
-    add_inversion.
+    inversion He; subst; clear He;
+      Var.simplify.
+
     + (* x occcurs in Δ1 *)
 
       setoid_replace (if Var.FSet.MF.eq_dec x t0 then e2 else subst x v e2)
@@ -1014,17 +650,18 @@ Proof.
       2:{
         compare x t0; auto.
         eapply (subst_not_in x v e2); eauto.
-        autorewrite with var_db; intuition.
+        Var.simplify.
       }
 
       (* Γ; Δ1-{x}; Θ1+Θ0 |- subst x v e1 : τ *)
       eapply (WTLetBang _
                 (Var.Map.remove x Δ1) Δ2
                 (Var.Map.concat Θ1 Θ0) Θ3);
-        eauto with var_db.
-      eapply IHe1; eauto with var_db.
+        eauto with extra_var_db.
+      eapply IHe1; eauto with var_db extra_var_db.
       autorewrite with var_db.
-      setoid_replace (Var.Map.add x τ Δ1) with Δ1; auto with var_db.
+      setoid_replace (Var.Map.add x τ Δ1) with Δ1;
+        auto with extra_var_db.
 
     + (* x occurs in Δ2 *)
       rename t0 into y.
@@ -1051,9 +688,13 @@ Proof.
       eapply (WTLetBang _ 
                 Δ1 (Var.Map.remove x Δ2)
                 Θ0 (Var.Map.concat Θ1 Θ3));
-        eauto with var_db.
-      eapply IHe2; eauto with var_db.
-      2:{ autorewrite with var_db. intuition. }
+        eauto with extra_var_db.
+      eapply IHe2; auto;
+      try match goal with
+      | [ |- WellTyped _ _ _ v _ ] => eauto
+      | [ |- Var.Map.Partition _ _ _ ] => eauto with var_db extra_var_db
+      | [ |- ~ Var.Map.In _ _ ] => Var.simplify
+      end.
       setoid_replace
         (Var.Map.add x τ (Var.Map.remove x Δ2))
         with Δ2
@@ -1062,17 +703,17 @@ Proof.
 
 
   * (* Bit b *)
-    inversion He; subst; add_inversion.
+    inversion He; subst; Var.simplify.
 
   * (* If *)
-    inversion He; subst; clear He.
-    add_inversion.
+    inversion He; subst; clear He; Var.simplify.
+
     + (* x in e1 *)
       erewrite (subst_not_in x v e2); eauto.
       erewrite (subst_not_in x v e3); eauto.
       eapply (WTIf (Var.Map.remove x Δ1) Δ2 (Var.Map.concat Θ1 Θ0) Θ3);
-        eauto with var_db.
-      eapply IHe1; eauto with var_db.
+        eauto with extra_var_db.
+      eapply IHe1; eauto with var_db extra_var_db.
       setoid_replace (Var.Map.add x τ (Var.Map.remove x Δ1))
         with Δ1
         by decide_equal; auto.
@@ -1081,23 +722,24 @@ Proof.
 
       erewrite (subst_not_in x v e1); eauto.
       eapply (WTIf Δ1 (Var.Map.remove x Δ2) Θ0 (Var.Map.concat Θ3 Θ1));
-        eauto with var_db.
-      - eapply IHe2; eauto with var_db.
+        eauto with extra_var_db.
+      - eapply IHe2; eauto with var_db extra_var_db.
         setoid_replace (Var.Map.add x τ (Var.Map.remove x Δ2))
         with Δ2 by decide_equal; auto.
-      - eapply IHe3; eauto with var_db.
+      - eapply IHe3; eauto with var_db extra_var_db.
         setoid_replace (Var.Map.add x τ (Var.Map.remove x Δ2))
           with Δ2 by decide_equal;
         auto.
 
   * (* Pair *)
-    inversion He; subst; clear He.
-    add_inversion.
+    inversion He; subst; clear He;
+      Var.simplify.
+    
     + (* x in e1 *)
       erewrite (subst_not_in x v e2); eauto.
       eapply (WTPair (Var.Map.remove x Δ1) Δ2 (Var.Map.concat Θ1 Θ0) Θ3);
-        eauto with var_db.
-      eapply IHe1; eauto with var_db.
+        eauto with var_db extra_var_db.
+      eapply IHe1; eauto with var_db extra_var_db.
 
       setoid_replace (Var.Map.add x τ (Var.Map.remove x Δ1))
         with Δ1
@@ -1107,8 +749,8 @@ Proof.
     + (* x in e2 *)
       erewrite (subst_not_in x v e1); eauto.
       eapply (WTPair Δ1 (Var.Map.remove x Δ2) Θ0 (Var.Map.concat Θ3 Θ1));
-        eauto with var_db.
-      eapply IHe2; eauto with var_db.
+        eauto with var_db extra_var_db.
+      eapply IHe2; eauto with var_db extra_var_db.
       setoid_replace (Var.Map.add x τ (Var.Map.remove x Δ2))
         with Δ2
         by decide_equal; auto.
@@ -1116,8 +758,8 @@ Proof.
   * (* LetPair *) 
     rename t0 into y1, t1 into y2.
   
-    inversion He; subst; clear He.
-    add_inversion.
+    inversion He; subst; clear He; Var.simplify.
+
     + (* x occcurs in Δ1 *)
 
       setoid_replace (if Var.FSet.MF.eq_dec x y1 then e2 else if Var.FSet.MF.eq_dec x y2 then e2 else subst x v e2)
@@ -1132,10 +774,11 @@ Proof.
       eapply (WTLetPair
                 (Var.Map.remove x Δ1) Δ2
                 (Var.Map.concat Θ1 Θ0) Θ3);
-        eauto with var_db.
-      eapply IHe1; eauto with var_db.
+        eauto with extra_var_db.
+      eapply IHe1; eauto with var_db extra_var_db.
       autorewrite with var_db.
-      setoid_replace (Var.Map.add x τ Δ1) with Δ1; auto with var_db.
+      setoid_replace (Var.Map.add x τ Δ1) with Δ1;
+        auto with extra_var_db.
 
     + (* x occurs in Δ2 *)
       erewrite (subst_not_in x v e1); eauto.
@@ -1154,13 +797,22 @@ Proof.
       eapply (WTLetPair
                 Δ1 (Var.Map.remove x Δ2)
                 Θ0 (Var.Map.concat Θ1 Θ3));
-        eauto.
-      2:{ autorewrite with var_db; intuition. }
-      2:{ autorewrite with var_db; intuition. }
-      2:{ auto with var_db. }
+        auto;
+        try match goal with
+        | [ |- Var.Map.Partition _ _ _ ] =>
+          auto with var_db extra_var_db
+        | [ |- ~ Var.Map.In _ _ ] => Var.simplify
+        | [ |- WellTyped _ _ _ e1 _ ] => eauto
+        end.
       
-      eapply IHe2; eauto with var_db.
-      2:{ autorewrite with var_db. intuition. }
+      eapply IHe2; auto;
+        try match goal with
+        | [ |- WellTyped _ _ _ v _ ] => eauto
+        | [ |- Var.Map.Partition _ _ _ ] =>
+          auto with var_db extra_var_db
+        | [ |- ~ Var.Map.In _ _ ] => Var.simplify
+        end.
+      
       setoid_replace
         (Var.Map.add x τ (Var.Map.add y1 τ1 (Var.Map.add y2 τ2 (Var.Map.remove x Δ2))))
         with (Var.Map.add y1 τ1 (Var.Map.add y2 τ2 Δ2))
@@ -1173,7 +825,7 @@ Proof.
     eapply IHe; eauto.
 
   * (* QRef *)
-    inversion He; subst; add_inversion.
+    inversion He; subst; Var.simplify.
 
   * (* New *) 
     inversion He; subst; clear He.
@@ -1200,16 +852,16 @@ Proof.
       auto.
     
   * (* Fix *)
-    inversion He; subst; add_inversion.
+    inversion He; subst; Var.simplify.
 
   * (* App *)
-    inversion He; subst; clear He.
-    add_inversion.
+    inversion He; subst; clear He; Var.simplify.
+
     + (* x in e1 *)
       erewrite (subst_not_in x v e2); eauto.
       eapply (WTApp (Var.Map.remove x Δ1) Δ2 (Var.Map.concat Θ1 Θ0) Θ3);
-        eauto with var_db.
-      eapply IHe1; eauto with var_db.
+        eauto with extra_var_db.
+      eapply IHe1; eauto with var_db extra_var_db.
 
       setoid_replace (Var.Map.add x τ (Var.Map.remove x Δ1))
         with Δ1
@@ -1219,8 +871,8 @@ Proof.
     + (* x in e2 *)
       erewrite (subst_not_in x v e1); eauto.
       eapply (WTApp Δ1 (Var.Map.remove x Δ2) Θ0 (Var.Map.concat Θ3 Θ1));
-        eauto with var_db.
-      eapply IHe2; eauto with var_db.
+        eauto with extra_var_db.
+      eapply IHe2; eauto with var_db extra_var_db.
       setoid_replace (Var.Map.add x τ (Var.Map.remove x Δ2))
         with Δ2
         by decide_equal; auto.
@@ -1254,9 +906,9 @@ Proof.
   eapply wt_subst; eauto.
   2:{ autorewrite with var_db. intuition. }
   { reflect_partition; try reflexivity.
-    vsimpl; auto.
+    Var.simplify; auto.
   }
-  { auto with var_db. }
+  { auto with extra_var_db. }
 Qed.
 
 
@@ -1322,7 +974,7 @@ Proof.
     try (rewrite HΔ in *; clear Δ HΔ);
     try (rewrite HΔ' in *; clear Δ' HΔ');
     try (inversion Hstep; auto; fail).
-  * vsimpl.
+  * Var.simplify.
     inversion Hstep; subst; clear Hstep.
     + (* e1 -> e1' *)  
 
@@ -1339,7 +991,7 @@ Proof.
   * (* Let!*)
     inversion Hstep; subst; clear Hstep.
     + (* e1 -> e1' *) 
-      vsimpl.
+      Var.simplify.
 
       (* We are given: (e1,refs) ~> (e1',refs') *)
       (* By weakening, we know that (e1,refs1) ~> (e1',refs1') where refs'=refs1' + refs2 *)
@@ -1347,37 +999,37 @@ Proof.
 
       (* So by the IH, Γ;refs1' |- e1' : τ *)
       eapply IHHWT1 in Hstep1; eauto with var_db;
-        try vsimpl;
+        try Var.simplify;
         try reflexivity.
       econstructor; eauto with var_db.
 
-    + vsimpl.
+    + Var.simplify.
       inversion HWT1; subst.
-      vsimpl.
+      Var.simplify.
       subst_map.
 
       eapply wt_subst_bang; eauto with var_db.
     
 
   * (* If *) 
-    vsimpl.
+    Var.simplify.
     inversion Hstep; subst; clear Hstep.
     + (* e -> e1' *)
       step_weakening_tac.
       eapply (IHHWT1) in Hstep1; eauto with var_db;
-        vsimpl;
+        Var.simplify;
         try reflexivity.
       econstructor; eauto with var_db.
 
     + inversion HWT1; subst.
-      vsimpl.
+      Var.simplify.
       destruct b; auto.
   * (* Pair *)
-    vsimpl.
+    Var.simplify.
     inversion Hstep; subst; clear Hstep.
     + step_weakening_tac.
       eapply (IHHWT1) in Hstep1; eauto with var_db;
-        vsimpl;
+        Var.simplify;
         try reflexivity.
       econstructor; eauto with var_db.
 
@@ -1387,7 +1039,7 @@ Proof.
         eauto with var_db.
       }
       eapply (IHHWT2) in Hstep1; eauto with var_db;
-        vsimpl;
+        Var.simplify;
         try reflexivity.
       econstructor; eauto with var_db.
       {
@@ -1395,7 +1047,7 @@ Proof.
       }
 
   * (* LetPair *) 
-    vsimpl.
+    Var.simplify.
     inversion Hstep; subst; clear Hstep.
     + (* e1 -> e1' *) 
 
@@ -1414,11 +1066,11 @@ Proof.
       | [ H : Val (Pair _ _) |- _ ] =>
           inversion H; subst; clear H
       end.
-      vsimpl.
+      Var.simplify.
       eapply wt_subst2; eauto.
 
   * (* Meas *)
-    vsimpl.
+    Var.simplify.
     inversion Hstep; subst; clear Hstep.
     + (* e1 -> e1' *) 
 
@@ -1440,7 +1092,7 @@ Proof.
       eauto with var_db.
 
   * (* New *)
-    vsimpl.
+    Var.simplify.
     inversion Hstep; subst; clear Hstep.
     + (* e1 -> e1' *) 
 
@@ -1458,7 +1110,7 @@ Proof.
         inversion H; subst; clear H
       end.
       inversion HWT; subst; clear HWT.
-      vsimpl.
+      Var.simplify.
       remember (Var.fresh Θ) as idx eqn:Hidx;
         clear Hidx.
       subst_map.
@@ -1466,7 +1118,7 @@ Proof.
       unfold Var.Map.Singleton. reflexivity.
 
   * (* Unitary *)
-    vsimpl.
+    Var.simplify.
     inversion Hstep; subst; clear Hstep.
     + (* e1 -> e1' *) 
 
@@ -1477,17 +1129,17 @@ Proof.
       (* So by the IH, Γ;refs1' |- e1' : τ *)
       eapply (IHHWT) in Hstep1; eauto with var_db;
         try reflexivity.
-      econstructor; eauto with var_db.
+      econstructor; eauto;
+        eauto with var_db.
 
     + inversion HWT; subst.
-      econstructor; eauto with var_db.
+      econstructor; eauto.
 
     + inversion HWT; subst; auto.
-      vsimpl.
-      econstructor; eauto with var_db.
+      econstructor; eauto.
 
   * (* App *)
-    vsimpl.
+    Var.simplify.
     inversion Hstep; subst; clear Hstep.
     + (* e1 -> e1' *) 
 
@@ -1496,12 +1148,13 @@ Proof.
       step_weakening_tac; eauto with var_db.
 
       (* So by the IH, Γ;refs1' |- e1' : τ *)
-      eapply (IHHWT1) in Hstep1; eauto with var_db;
+      eapply (IHHWT1) in Hstep1;
+        eauto with var_db;
         try reflexivity.
-      econstructor; eauto with var_db.
+      econstructor; eauto; eauto with var_db.
 
     + (* e2 -> e2' *)
-      step_weakening_tac; eauto with var_db.
+      step_weakening_tac.
       { apply Var.Map.Properties.Partition_sym; eauto. }
       eapply IHHWT2 in Hstep1; eauto with var_db.
       econstructor; eauto with var_db.
@@ -1524,8 +1177,8 @@ Proof.
       WTS
       ∅;∅;Θ1,Θ2 ⊢ e{fix f.x.e / f, e2/x} : τ'
       *)
-      inversion HWT1; subst; vsimpl.
-      inversion HWT2; subst; vsimpl.
+      inversion HWT1; subst. vsimpl.
+      inversion HWT2; subst. vsimpl.
 
       eapply wt_subst_bang; eauto with var_db.
       eapply wt_subst_bang; eauto with var_db.
@@ -1534,7 +1187,6 @@ Qed.
 
 (*
 
-Hint Rewrite Var.MapFacts.F.empty_mapsto_iff : var_db.
 Theorem progress : forall e τ Γ Δ,
   WellTyped Γ Δ e τ ->
   forall cfg,
@@ -1548,11 +1200,11 @@ Proof.
   induction Hwt; intros cfg Hscoped HΓ HΔ Hwf.
   * contradict H.
     unfold Var.Map.Singleton.
-    vsimpl.
+    Var.simplify.
     admit (* lemma *).
-  * exfalso. vsimpl.
+  * exfalso. Var.simplify.
     autorewrite with var_db in *; auto.
-  * vsimpl.
+  * Var.simplify.
     unfold WellFormed in 
   
   exfalso.
