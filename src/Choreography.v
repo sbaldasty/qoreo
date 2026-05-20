@@ -319,7 +319,7 @@ Proof.
   - intros G' HW. eapply LetBang; eauto.
 
     pose proof (Expr.weakening_gen
-                  (ChorEnv.find A G) DeltaA1 ThetaA1 e (Expr.BANG tau) H (ChorEnv.find A G'))
+                  e (ChorEnv.find A G) DeltaA1 ThetaA1 (Expr.BANG tau) H (ChorEnv.find A G'))
       as HEW.
     apply HEW.
     intros x' tau' HVM.
@@ -335,13 +335,13 @@ Proof.
     auto.
 
   - intros G' HW. eapply LetIn; eauto.
-    pose proof (Expr.weakening_gen (ChorEnv.find A G) DeltaA1 ThetaA1 e tau H (ChorEnv.find A G'))
+    pose proof (Expr.weakening_gen e (ChorEnv.find A G) DeltaA1 ThetaA1  tau H (ChorEnv.find A G'))
       as HEW.
     setoid_rewrite -> extension in HW.
     auto.
 
   - intros G' HW. eapply LetPair; eauto.
-    pose proof (Expr.weakening_gen (ChorEnv.find A G) DeltaA1 ThetaA1 e
+    pose proof (Expr.weakening_gen e (ChorEnv.find A G) DeltaA1 ThetaA1
                   (Expr.Tensor tau1 tau2) H (ChorEnv.find A G'))
       as HEW.
     setoid_rewrite -> extension in HW.
@@ -471,7 +471,7 @@ Proof.
     + Actor.Map.Tactics.compare A A0; eauto.
     
       {
-        pose proof (Expr.wt_subst_bang tau (ChorEnv.find A G) DeltaA1 ThetaA1 x v e (Expr.Tensor tau1 tau2)) as HEWTS.
+        pose proof (Expr.wt_subst_bang e tau (ChorEnv.find A G) DeltaA1 ThetaA1 x v (Expr.Tensor tau1 tau2)) as HEWTS.
           eapply HEWTS.
         { auto. }
         { apply Expr.weakening; auto. }

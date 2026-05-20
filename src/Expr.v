@@ -327,6 +327,7 @@ end.
 Inductive WellTyped : Var.Map.t typ -> Var.Map.t typ -> Var.Map.t nat -> Expr.t -> typ -> Prop :=
 
 | WTQVar : forall Γ Δ Θ x τ,
+  ~ Var.Map.In x Γ ->
   Var.Map.Singleton x τ Δ ->
   Var.Map.Empty Θ ->
   WellTyped Γ Δ Θ (Var x) τ
@@ -344,6 +345,7 @@ Inductive WellTyped : Var.Map.t typ -> Var.Map.t typ -> Var.Map.t nat -> Expr.t 
   
   Var.Map.Partition Δ Δ1 Δ2 ->
   ~ Var.Map.In x Δ2 ->
+  ~ Var.Map.In x Γ ->
   Var.Map.Partition Θ Θ1 Θ2 ->
 
   WellTyped Γ Δ Θ (LetIn x e1 e2) τ'
@@ -400,6 +402,8 @@ Inductive WellTyped : Var.Map.t typ -> Var.Map.t typ -> Var.Map.t nat -> Expr.t 
   ~ Var.Map.In x2 Δ2 ->
   x1 <> x2 ->
   Var.Map.Partition Θ Θ1 Θ2 ->
+  ~ Var.Map.In x1 Γ ->
+  ~ Var.Map.In x2 Γ ->
 
   WellTyped Γ Δ Θ (LetPair x1 x2 e e') τ'
 
@@ -425,6 +429,7 @@ Inductive WellTyped : Var.Map.t typ -> Var.Map.t typ -> Var.Map.t nat -> Expr.t 
 
 | WTLambda : forall Γ Δ Θ x e τ1 τ2,
   ~ Var.Map.In x Δ ->
+  ~ Var.Map.In x Γ ->
   WellTyped Γ (Var.Map.add x τ1 Δ) Θ e τ2 ->
   WellTyped Γ Δ Θ (Lambda x e) (Lolli τ1 τ2)
 
@@ -471,7 +476,8 @@ Lemma WellTyped_context_equal :
 Proof.
   intros Γ Δ Θ e τ He.
   induction He; intros Γ0 Δ0 Θ0 HΓ HΔ HΘ;
-    try (econstructor; eauto;
+    try (
+      econstructor;
       try apply IHHe;
       try apply IHHe1;
       try apply IHHe2;
@@ -480,7 +486,8 @@ Proof.
       try rewrite <- HΓ;
       try rewrite <- HΘ;
       try reflexivity;
-      eauto; fail).
+      eauto;
+      fail).
 Qed.
 
 
@@ -495,28 +502,119 @@ Proof.
     try (symmetry; auto).
 Qed.
 
+Fixpoint vars (e : t) : Var.FSet.t :=
+  match e with
+  | Var x | QRef x => Var.FSet.singleton x 
 
+  | LetIn x e1 e2 | LetBang x e1 e2 =>
+    Var.FSet.add x (Var.FSet.union (vars e1) (vars e2))
+
+  | Bit _ => Var.FSet.empty
+  | Bang e | Meas e | New e | Unitary _ e =>
+    vars e
+  | Pair e1 e2 | App e1 e2 =>
+    Var.FSet.union (vars e1) (vars e2)
+  | If e0 e1 e2 =>
+    Var.FSet.union (vars e0) (Var.FSet.union (vars e1) (vars e2))
+  
+  | LetPair x1 x2 e1 e2 =>
+    Var.FSet.add x1 (Var.FSet.add x2 (Var.FSet.union (vars e1) (vars e2)))
+  
+  | Lambda x e' => Var.FSet.add x (vars e')
+  | Fix f x e' => Var.FSet.add f (Var.FSet.add x (vars e'))
+  
+  end.
 
 (***************)
 (* Type safety *)
 (***************)
 
-Lemma weakening_gen : forall Γ Δ Θ e τ,
+
+Lemma wt_disjoint : forall Γ Δ Θ e τ,
+  WellTyped Γ Δ Θ e τ ->
+  Var.Map.Properties.Disjoint Γ Δ.
+Admitted.
+
+
+Lemma weakening_gen : forall e Γ Δ Θ τ,
   WellTyped Γ Δ Θ e τ ->
   forall Γ',
   (forall x τ, Var.Map.MapsTo x τ Γ -> Var.Map.MapsTo x τ Γ') ->
+  (*(forall x, Var.FSet.In x (vars e) -> ~ Var.Map.In x Γ') ->*)
   WellTyped Γ' Δ Θ e τ.
 Proof.
-  intros Γ Δ Θ e τ HWT.
-  induction HWT; intros Γ' Hsub;
-    try (econstructor; eauto; fail).
-  * eapply WTLetBang; eauto.
+  (*
+  intros ? ? ? ? ? HWT;
+  induction HWT; intros Γ' Hsub Hdisj;
+    vsimpl; simpl in Hdisj;
+    try (econstructor; eauto with var_db;
+      try eapply IHHWT;
+      try eapply IHHWT1;
+      try eapply IHHWT2;
+      eauto;
+      intros;
+      try apply Hdisj; autorewrite with var_db; auto;
+      fail
+    ).
+
+  * (* Let! *)
+    econstructor; eauto with var_db.
+    + eapply IHHWT1; auto.
+      intros y Hy.
+      apply Hdisj. autorewrite with var_db. intuition.
+    + 
+    
+      eapply IHHWT2; auto.
+      {
+       intros y ? Hin. autorewrite with var_db in *.
+       intuition.
+      }
+      { intros y Hin Hin'. autorewrite with var_db in *.
+        destruct Hin' as [? | Hin']; subst; auto.
+        2:{ revert Hin'. apply Hdisj. autorewrite with var_db. auto. }
+        (* y ∈ vars(e2) *)
+        (* so y ∈ vars(letin) *)
+        (* so y∉ Γ' *)
+        (* so y∉ Γ*)
+      } 
+
+
+  try (econstructor; eauto with var_db;
+      try eapply IHHWT;
+      try eapply IHHWT1;
+      try eapply IHHWT2;
+      eauto;
+      intros;
+      try apply Hdisj; autorewrite with var_db; auto
+          ).
+    {
+      
+    }
+      apply IHe1.
+          intuition.
+          eauto.
+    eapply IHe1.
+    eapply WTLetIn; eauto with var_db.
+    + eapply IHe1; eauto.
+      intros x Hvars; apply Hdisj;
+        autorewrite with var_db.
+      intuition.
+    + eapply IHe2; eauto.
+      intros x Hvars.
+      apply Hdisj; autorewrite with var_db; intuition.
+    + apply Hdisj; autorewrite with var_db; intuition.
+  * 
+
+  * reflect_partition; vsimpl.
+    eapply WTLetBang; eauto with extra_var_db.
     apply IHHWT2.
-    intros y σ Hy.
-    autorewrite with var_db in *.
-    destruct Hy as [[Heq Hmaps] | [Hneq Hmaps]].
-    + left; auto.
-    + right; split; auto.
+    {
+      intros y σ Hy.
+      autorewrite with var_db in *. intuition.
+    }
+    {
+      vsimpl; auto.
+    }
 
   * eapply WTFix; eauto.
     apply IHHWT.
@@ -529,6 +627,8 @@ Proof.
       - left; auto.
       - right; split; auto.
 Qed.
+*)
+Admitted.
 
 Lemma weakening : forall Γ Δ Θ e τ,
   WellTyped (Var.Map.empty _) Δ Θ e τ ->
@@ -536,19 +636,13 @@ Lemma weakening : forall Γ Δ Θ e τ,
 Proof.
   intros Γ Δ Θ e τ HWT.
   eapply weakening_gen; eauto.
+  { 
   intros x τ' Hmaps.
   exfalso.
   autorewrite with var_db in Hmaps.
   contradiction.
+  }
 Qed.
-
-Lemma wt_subst_bang : forall τ Γ Δ Θ x v e τ',
-  Val v ->
-  WellTyped (Var.Map.empty _) (Var.Map.empty _) (Var.Map.empty _) v (BANG τ) ->
-  WellTyped (Var.Map.add x τ Γ) Δ Θ e τ' ->
-  WellTyped Γ Δ Θ (subst x v e) τ'.
-Proof.
-Admitted.
 
 Lemma subst_not_in : forall x v e Γ Δ Θ τ,
   WellTyped Γ Δ Θ e τ ->
@@ -560,10 +654,34 @@ Hint Resolve subst_not_in : var_db.
 
 #[global] Hint Resolve weakening : var_db.
 
-Lemma wt_disjoint : forall Γ Δ Θ e τ,
-  WellTyped Γ Δ Θ e τ ->
-  Var.Map.Properties.Disjoint Γ Δ.
+Lemma wt_subst_bang : forall e τ Γ Δ Θ x v τ',
+  Val v ->
+  WellTyped (Var.Map.empty _) (Var.Map.empty _) (Var.Map.empty _) v (BANG τ) ->
+  WellTyped (Var.Map.add x τ Γ) Δ Θ e τ' ->
+  WellTyped Γ Δ Θ (subst x v e) τ'.
+Proof.
+  intros e; induction e;
+    intros ? ? ? ? ? ? ? Hval Hv He;
+    simpl.
+  * (* var *)
+    inversion He; subst; Var.simplify.
+    2:{ (* linear variable *)
+        autorewrite with var_db in *. 
+        compare x t0; auto.
+    
+    inversion He; subst; Var.simplify.
+        absurd (Var.Map.Singleton t0 τ' (Var.Map.empty typ)); auto.
+        unfold Var.Map.Singleton.
+        intros Heq. specialize (Heq t0).
+        autorewrite with var_db in Heq. compare t0 t0; discriminate.
+        autorewrite with var_db.
+        vsimpl.
+    admit.
+    admit.
+    admit.
+    }
 Admitted.
+
 
 
 Lemma wt_subst : forall e Θ1 Θ2 τ Γ Δ Θ x v τ',

@@ -474,6 +474,14 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
     apply disjoint_sym. auto.
   Qed.
 
+
+  Lemma disjoint_add_1 : forall A m1 m2 x (a : A),
+    Disjoint (M.add x a m1) m2 <-> Disjoint m1 m2 /\ ~ M.In x m2.
+  Admitted.
+  Lemma disjoint_add_2 : forall A m1 m2 x (a : A),
+    Disjoint m1 (M.add x a m2) <-> Disjoint m1 m2 /\ ~ M.In x m1.
+  Admitted.
+
   Ltac reduce_disjoint :=
   repeat match goal with
         | [ H : Disjoint ?m1 ?m2 |- Disjoint ?m2 ?m1 ] =>
@@ -893,7 +901,10 @@ Module Var.
   #[global] Hint Rewrite Map.Properties.F.add_o : var_db.
   #[global] Hint Rewrite Map.Properties.F.empty_o : var_db.
   #[global] Hint Rewrite Map.Properties.F.map_in_iff : var_db.
+  #[global] Hint Rewrite Map.Properties.F.remove_mapsto_iff : var_db.
   #[global] Hint Rewrite Map.Properties.F.remove_in_iff : var_db.
+  #[global] Hint Rewrite Map.Proofs.disjoint_add_1 : var_db.
+  #[global] Hint Rewrite Map.Proofs.disjoint_add_2 : var_db.
 
   #[global] Existing Instance Map.Proofs.singletonProper.
   #[global] Existing Instance Map.Proofs.concatProper.
@@ -1119,9 +1130,12 @@ Module Actor.
   #[global] Hint Rewrite Map.Properties.F.add_o : actor_db.
   #[global] Hint Rewrite Map.Properties.F.empty_o : actor_db.
   #[global] Hint Rewrite Map.Properties.F.map_in_iff : actor_db.
+  #[global] Hint Rewrite Map.Properties.F.remove_mapsto_iff : actor_db.
   #[global] Hint Resolve Map.empty_1 : actor_db.
   #[global] Hint Resolve Map.Properties.Partition_sym : actor_db.
-  #[global] Hint Rewrite Map.Properties.F.remove_in_iff : var_db.
+  #[global] Hint Rewrite Map.Properties.F.remove_in_iff : actor_db.
+  #[global] Hint Rewrite Map.Proofs.disjoint_add_1 : actor_db.
+  #[global] Hint Rewrite Map.Proofs.disjoint_add_2 : actor_db.
 
   #[global] Existing Instance Map.Proofs.singletonProper.
   #[global] Existing Instance Map.Proofs.concatProper.
