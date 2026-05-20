@@ -341,11 +341,10 @@ Inductive WellTyped : Var.Map.t typ -> Var.Map.t typ -> Var.Map.t nat -> Expr.t 
 | WTLetIn : forall Δ1 Δ2 Θ1 Θ2 τ Γ Δ Θ x e1 e2 τ',
   WellTyped Γ Δ1 Θ1 e1 τ ->
 
-  WellTyped Γ (Var.Map.add x τ Δ2) Θ2 e2 τ' ->
+  WellTyped (Var.Map.remove x Γ) (Var.Map.add x τ Δ2) Θ2 e2 τ' ->
   
   Var.Map.Partition Δ Δ1 Δ2 ->
   ~ Var.Map.In x Δ2 ->
-  ~ Var.Map.In x Γ ->
   Var.Map.Partition Θ Θ1 Θ2 ->
 
   WellTyped Γ Δ Θ (LetIn x e1 e2) τ'
@@ -364,6 +363,7 @@ Inductive WellTyped : Var.Map.t typ -> Var.Map.t typ -> Var.Map.t nat -> Expr.t 
 
   Var.Map.Partition Δ Δ1 Δ2 ->
   Var.Map.Partition Θ Θ1 Θ2 ->
+  ~ Var.Map.In x Δ2 ->
 
   WellTyped Γ Δ Θ (LetBang x e1 e2) τ'
 
@@ -395,15 +395,15 @@ Inductive WellTyped : Var.Map.t typ -> Var.Map.t typ -> Var.Map.t nat -> Expr.t 
 | WTLetPair : forall Δ1 Δ2 Θ1 Θ2 τ1 τ2 Γ Δ Θ x1 x2 e e' τ',
 
   WellTyped Γ Δ1 Θ1 e (Tensor τ1 τ2) ->
-  WellTyped Γ (Var.Map.add x1 τ1 (Var.Map.add x2 τ2 Δ2)) Θ2 e' τ' ->
+  WellTyped (Var.Map.remove x1 (Var.Map.remove x2 Γ))
+            (Var.Map.add x1 τ1 (Var.Map.add x2 τ2 Δ2))
+            Θ2 e' τ' ->
   
   Var.Map.Partition Δ Δ1 Δ2 ->
   ~ Var.Map.In x1 Δ2 ->
   ~ Var.Map.In x2 Δ2 ->
   x1 <> x2 ->
   Var.Map.Partition Θ Θ1 Θ2 ->
-  ~ Var.Map.In x1 Γ ->
-  ~ Var.Map.In x2 Γ ->
 
   WellTyped Γ Δ Θ (LetPair x1 x2 e e') τ'
 
@@ -430,7 +430,7 @@ Inductive WellTyped : Var.Map.t typ -> Var.Map.t typ -> Var.Map.t nat -> Expr.t 
 | WTLambda : forall Γ Δ Θ x e τ1 τ2,
   ~ Var.Map.In x Δ ->
   ~ Var.Map.In x Γ ->
-  WellTyped Γ (Var.Map.add x τ1 Δ) Θ e τ2 ->
+  WellTyped (Var.Map.remove x Γ) (Var.Map.add x τ1 Δ) Θ e τ2 ->
   WellTyped Γ Δ Θ (Lambda x e) (Lolli τ1 τ2)
 
 | WTFix : forall Γ Δ Θ f x e τ1 τ2,
@@ -528,25 +528,76 @@ Fixpoint vars (e : t) : Var.FSet.t :=
 (***************)
 (* Type safety *)
 (***************)
+Hint Rewrite Var.Map.Properties.F.empty_in_iff : var_db.
 
+
+Lemma wt_disjoint' : forall Γ Δ Θ e τ,
+  WellTyped Γ Δ Θ e τ ->
+  forall z, Var.Map.In z Γ -> Var.Map.In z Δ -> False.
+Proof.
+  intros ? ? ? ? ? HWT.
+  induction HWT;
+    intros z HΓ HΔ;
+    vsimpl;
+    autorewrite with var_db in *;
+    auto;
+
+    try (apply (IHHWT z); auto; fail);
+
+    reflect_partition; autorewrite with var_db in *.
+
+  * unfold Var.Map.Singleton in *.
+    vsimpl.
+    autorewrite with var_db in *.
+    compare x z; auto. intuition.
+  * destruct HΔ as [HΔ1 | HΔ2].
+    { apply (IHHWT1 z); auto. }
+    compare x z.
+    apply (IHHWT2 z); autorewrite with var_db;
+      intuition.
+  * destruct HΔ as [HΔ1 | HΔ2].
+    { apply (IHHWT1 z); auto. }
+    compare x z.
+    apply (IHHWT2 z); autorewrite with var_db;
+      intuition.
+  * destruct HΔ as [HΔ1 | HΔ2].
+    { apply (IHHWT1 z); auto. }
+    { apply (IHHWT2 z); auto. }
+  * destruct HΔ as [HΔ1 | HΔ2].
+    { apply (IHHWT1 z); auto. }
+    { apply (IHHWT2 z); auto. }
+  * destruct HΔ as [HΔ1 | HΔ2].
+    { apply (IHHWT1 z); auto. }
+    compare x1 z.
+    compare x2 z.
+    apply (IHHWT2 z); autorewrite with var_db;
+      intuition.
+  * compare x z.
+    apply (IHHWT z); autorewrite with var_db; intuition.
+  * destruct HΔ as [HΔ1 | HΔ2].
+    { apply (IHHWT1 z); auto. }
+    { apply (IHHWT2 z); auto. }
+Qed.
 
 Lemma wt_disjoint : forall Γ Δ Θ e τ,
   WellTyped Γ Δ Θ e τ ->
   Var.Map.Properties.Disjoint Γ Δ.
-Admitted.
-
+Proof.
+  intros ? ? ? ? ? HWT z [HΓ HΔ].
+  eapply wt_disjoint'; eauto.
+Qed.
 
 Lemma weakening_gen : forall e Γ Δ Θ τ,
   WellTyped Γ Δ Θ e τ ->
   forall Γ',
   (forall x τ, Var.Map.MapsTo x τ Γ -> Var.Map.MapsTo x τ Γ') ->
-  (*(forall x, Var.FSet.In x (vars e) -> ~ Var.Map.In x Γ') ->*)
+  (forall x, Var.FSet.In x (vars e) -> ~ Var.Map.In x Γ') ->
   WellTyped Γ' Δ Θ e τ.
 Proof.
   (*
   intros ? ? ? ? ? HWT;
   induction HWT; intros Γ' Hsub Hdisj;
-    vsimpl; simpl in Hdisj;
+    vsimpl; (* simpl in Hdisj;*)
     try (econstructor; eauto with var_db;
       try eapply IHHWT;
       try eapply IHHWT1;
@@ -556,6 +607,8 @@ Proof.
       try apply Hdisj; autorewrite with var_db; auto;
       fail
     ).
+
+  * 
 
   * (* Let! *)
     econstructor; eauto with var_db.
