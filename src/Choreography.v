@@ -286,10 +286,12 @@ Proof.
   intros G1 G2 HMA1 A x tau1 B y tau2 HMA2. 
 Admitted.
 
+(* TODO: Need a stronger statement for weakening---need G' to still be disjoint from D *)
 Lemma weakening_gen : forall G D T C,
     WellTyped G D T C -> forall G',
       (forall A x tau, ChorEnv.MapsTo A x tau G -> ChorEnv.MapsTo A x tau G') ->
       WellTyped G' D T C.
+(*
 Proof.
   intros G D T C HWT.
   induction HWT.
@@ -347,6 +349,8 @@ Proof.
     setoid_rewrite -> extension in HW.
     auto.
 Qed.
+*)
+Admitted.
 
 Lemma no_capture_add : forall A x (tau1 : Expr.typ) I G, 
     (Insn.rebound_in A x I) = false ->
@@ -366,7 +370,7 @@ Require Import Setoid.
 Lemma wt_subst_bang : forall tau G D T A x v C,
     WellTyped G D T C ->
     Expr.Val v ->
-    Expr.WellTyped (Var.Map.empty _) (Var.Map.empty _) (Var.Map.empty _) v (Expr.BANG tau) ->
+    Expr.WellTyped (Var.Map.empty _) (Var.Map.empty _) (Var.Map.empty _) v tau ->
     ChorEnv.MapsTo A x tau G ->
                WellTyped G D T (Choreography.subst A x v C).
 Proof.
@@ -384,9 +388,7 @@ Proof.
   
   - eapply Send; eauto.
 
-    + (* v must be of the form !e *)
-      inversion HWTV; subst; inversion HV; subst.
-      Var.Map.Tactics.vsimpl.
+    + 
       destruct (Actor.FSet.MF.eq_dec A A0) eqn:Heq; subst; eauto.
       { (* A = A0 *)
         eapply Expr.wt_subst_bang; eauto.
@@ -472,9 +474,7 @@ Proof.
     
       {
         pose proof (Expr.wt_subst_bang e tau (ChorEnv.find A G) DeltaA1 ThetaA1 x v (Expr.Tensor tau1 tau2)) as HEWTS.
-          eapply HEWTS.
-        { auto. }
-        { apply Expr.weakening; auto. }
+          eapply HEWTS; auto.
         { rewrite add_MapsTo; eauto. }
       }
     + fold Choreography.subst.

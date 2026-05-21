@@ -149,7 +149,7 @@ Inductive step : Expr.t -> Var.Map.t nat -> Config.t -> Expr.t -> Var.Map.t nat 
        (LetBang x e1' e2) refs' cfg'
 
 | LetBangB : forall x e1 e2 refs cfg e2',
-  e2' = subst x (Bang e1) e2 ->
+  e2' = subst x e1 e2 ->
 
   step (LetBang x (Bang e1) e2) refs cfg
        e2' refs cfg
@@ -222,7 +222,7 @@ Inductive step : Expr.t -> Var.Map.t nat -> Config.t -> Expr.t -> Var.Map.t nat 
 
 | AppFixB : forall f x e e0 refs cfg e',
 
-  e' = subst x (Bang e0) (subst f (Bang (Fix f x e)) e) ->
+  e' = subst x e0 (subst f (Fix f x e) e) ->
 
   step (App (Fix f x e) (Bang e0)) refs cfg e' refs cfg
 
@@ -586,14 +586,6 @@ Proof.
   eapply wt_disjoint'; eauto.
 Qed.
 
-
-Lemma add_add_eq : forall A x (a b : A) m,
-  Var.Map.Equal 
-    (Var.Map.add x a (Var.Map.add x b m))
-    (Var.Map.add x a m).
-Admitted.
-
-
 Lemma weakening1 : forall e Γ Δ Θ τ,
   WellTyped Γ Δ Θ e τ ->
   forall x0 τ0,
@@ -651,7 +643,7 @@ Proof.
       try Var.Map.Tactics.partition_concat.
 
     compare x z.
-    { rewrite add_add_eq; auto. }
+    { autorewrite with var_db; auto. }
     {
       rewrite Var.Map.Proofs.add_neq_sym; auto.
       eapply IHHWT2; auto;
@@ -680,11 +672,11 @@ Proof.
     compare f z.
     {
       rewrite (Var.Map.Proofs.add_neq_sym _ f x); auto.
-      rewrite add_add_eq; auto.
+      autorewrite with var_db; auto.
       rewrite (Var.Map.Proofs.add_neq_sym _ x f); auto.
     }
     compare x z.
-    { rewrite add_add_eq; auto. }
+    { autorewrite with var_db; auto. }
     rewrite (Var.Map.Proofs.add_neq_sym _ x z); auto.
     rewrite (Var.Map.Proofs.add_neq_sym _ f z); auto.
     eapply IHHWT;
@@ -878,12 +870,12 @@ Hint Resolve subst_not_in : var_db.
 #[global] Hint Resolve weakening : var_db.
 
 Lemma wt_subst_bang : forall e τ Γ Δ Θ x v τ',
-  Val v ->
+  (*Val v ->*)
   WellTyped (Var.Map.empty _) (Var.Map.empty _) (Var.Map.empty _) v τ ->
   WellTyped (Var.Map.add x τ Γ) Δ Θ e τ' ->
   WellTyped Γ Δ Θ (subst x v e) τ'.
 Proof.
-  intros ? ? ? ? ? ? ? ? Hval Hv He.
+  intros ? ? ? ? ? ? ? ? (*Hval*) Hv He.
   assert (Hdisj : Var.Map.Properties.Disjoint (Var.Map.add x τ Γ) Δ).
   { eapply wt_disjoint; eauto. }
   autorewrite with var_db in Hdisj.
@@ -942,9 +934,7 @@ Proof.
     eapply (WTLetBang _ Δ1 Δ2 Θ1 Θ2); eauto;
       try Var.Map.Tactics.partition_concat.
     compare x y.
-    { (* x = y *) rewrite add_add_eq in *.
-      auto.
-    }
+    { (* x = y *) autorewrite with var_db in *; auto. }
     {
       eapply IHe2; eauto;
         [ | Var.simplify ].
@@ -969,7 +959,7 @@ Proof.
     autorewrite with var_db in *.
     repeat reduce_eq_dec.
     
-    eapply IHe2; [auto | eauto | eauto | | Var.simplify].
+    eapply IHe2; [ eauto | eauto | | Var.simplify].
     {
       autorewrite with var_db.
       intuition.
@@ -979,7 +969,7 @@ Proof.
   * (* Lambda *)
     econstructor; eauto with var_db.
     compare x y; reduce_eq_dec; auto.
-    eapply IHe; [auto | eauto | eauto | | Var.simplify].
+    eapply IHe; [ eauto | eauto | | Var.simplify].
     {
       autorewrite with var_db.
       intuition.
@@ -993,16 +983,14 @@ Proof.
     {
       rewrite (Var.Map.MProofs.Proofs.add_neq_sym _ f y) in *;
         auto.
-      rewrite add_add_eq in *.
+      autorewrite with var_db in *.
       rewrite <- (Var.Map.MProofs.Proofs.add_neq_sym _ f y) in *;
         auto.
     }
     compare y x; reduce_eq_dec.
-    {
-      rewrite add_add_eq in *; auto.
-    }
+    { autorewrite with var_db in *; auto. }
     eapply IHe;
-      [ auto | eauto |
+      [ eauto |
       | Var.simplify | Var.simplify ].
     rewrite (Var.Map.MProofs.Proofs.add_neq_sym _ x f); auto.
     rewrite (Var.Map.MProofs.Proofs.add_neq_sym _ x y); auto.
@@ -1010,7 +998,7 @@ Qed.
 
 
 Lemma wt_subst : forall e Θ1 Θ2 τ Γ Δ Θ x v τ',
-  Val v ->
+  (*Val v ->*)
   WellTyped (Var.Map.empty _) (Var.Map.empty _) Θ1 v τ ->
   WellTyped Γ (Var.Map.add x τ Δ) Θ2 e τ' ->
   Var.Map.Partition Θ Θ1 Θ2 ->
@@ -1020,7 +1008,7 @@ Lemma wt_subst : forall e Θ1 Θ2 τ Γ Δ Θ x v τ',
   WellTyped Γ Δ Θ (subst x v e) τ'.
 Proof.
   intros e; induction e;
-    intros ? ? ? ? ? ? ? ? ? Hval Hv He Hpart HΓ Hin;
+    intros ? ? ? ? ? ? ? ? ? (*Hval*) Hv He Hpart HΓ Hin;
     simpl.
   * (* Var *)
     inversion He; subst; clear He;
@@ -1070,8 +1058,9 @@ Proof.
       2:{ Var.simplify. }
       2:{ auto with extra_var_db. }
       
-      eapply IHe2; eauto with var_db extra_var_db.
-      2:{ Var.simplify. }
+      eapply IHe2;
+        [ eauto | | auto with extra_var_db
+        | Var.simplify | Var.simplify ].
       setoid_replace
         (Var.Map.add x τ (Var.Map.add y τ0 (Var.Map.remove x Δ2)))
         with (Var.Map.add y τ0 Δ2)
@@ -1131,7 +1120,10 @@ Proof.
       eapply (WTLetBang _ 
                 Δ1 (Var.Map.remove x Δ2)
                 Θ0 (Var.Map.concat Θ1 Θ3));
-        eauto with extra_var_db.
+        [ eauto |
+        | auto with extra_var_db
+        | auto with extra_var_db
+        | Var.simplify ].
       eapply IHe2; auto;
       try match goal with
       | [ |- WellTyped _ _ _ v _ ] => eauto
@@ -1209,8 +1201,8 @@ Proof.
         with e2.
       2:{
         repeat reduce_eq_dec; auto.
-        eapply (subst_not_in x v e2); eauto.
-        autorewrite with var_db; intuition.
+        eapply (subst_not_in x v e2); [eauto | | ];
+          Var.simplify.
       }
 
       (* Γ; Δ1-{x}; Θ1+Θ0 |- subst x v e1 : τ *)
@@ -1218,7 +1210,11 @@ Proof.
                 (Var.Map.remove x Δ1) Δ2
                 (Var.Map.concat Θ1 Θ0) Θ3);
         eauto with extra_var_db.
-      eapply IHe1; eauto with var_db extra_var_db.
+      eapply IHe1;
+        [ eauto | 
+        | eauto with extra_var_db
+        | auto
+        | Var.simplify ].
       autorewrite with var_db.
       setoid_replace (Var.Map.add x τ Δ1) with Δ1;
         auto with extra_var_db.
@@ -1287,8 +1283,9 @@ Proof.
     assert (x <> y) by intuition.
     compare x y.
     constructor; auto.
-    eapply IHe; eauto with var_db.
-    2:{ autorewrite with var_db. intuition. }
+    eapply IHe;
+      [ eauto | 
+      | eauto | Var.simplify | Var.simplify ].
     setoid_replace (Var.Map.add x τ (Var.Map.add y τ1 Δ))
       with         (Var.Map.add y τ1 (Var.Map.add x τ Δ))
       by decide_equal;
@@ -1323,8 +1320,6 @@ Proof.
 Qed.
 
 Lemma wt_subst2 : forall Θ1 Θ2 Θ0 Θ τ1 τ2 Γ Δ Θ' x1 v1 x2 v2 e τ',
-  Val v1 ->
-  Val v2 ->
   WellTyped (Var.Map.empty _) (Var.Map.empty _) Θ1 v1 τ1 ->
   WellTyped (Var.Map.empty _) (Var.Map.empty _) Θ2 v2 τ2 ->
   WellTyped Γ (Var.Map.add x1 τ1 (Var.Map.add x2 τ2 Δ)) Θ0 e τ' ->
@@ -1339,10 +1334,10 @@ Proof.
   intros.
   assert (Hin : ~ Var.Map.In x1 Γ /\ ~ Var.Map.In x2 Γ).
   {
-    apply wt_disjoint in H3.
+    apply wt_disjoint in H1.
     split.
-    specialize (H3 x1); autorewrite with var_db in H3; intuition.
-    specialize (H3 x2); autorewrite with var_db in H3; intuition.
+    specialize (H1 x1); autorewrite with var_db in *; intuition.
+    specialize (H1 x2); autorewrite with var_db in *; intuition.
   }
   destruct Hin.
   eapply wt_subst; eauto.
@@ -1418,6 +1413,9 @@ Proof.
     try (rewrite HΔ' in *; clear Δ' HΔ');
     try (inversion Hstep; auto; fail).
   * Var.simplify.
+    autorewrite with var_db in *.
+    assert (~ Var.Map.In x (Var.Map.empty typ))
+      by (autorewrite with var_db; auto).
     inversion Hstep; subst; clear Hstep.
     + (* e1 -> e1' *)  
 
@@ -1432,9 +1430,9 @@ Proof.
     + eapply wt_subst; eauto.
 
   * (* Let!*)
+    Var.simplify.
     inversion Hstep; subst; clear Hstep.
-    + (* e1 -> e1' *) 
-      Var.simplify.
+    + (* e1 -> e1' *)
 
       (* We are given: (e1,refs) ~> (e1',refs') *)
       (* By weakening, we know that (e1,refs1) ~> (e1',refs1') where refs'=refs1' + refs2 *)
@@ -1446,10 +1444,10 @@ Proof.
         try reflexivity.
       econstructor; eauto with var_db.
 
-    + Var.simplify.
+    + (* beta *)
+
       inversion HWT1; subst.
       Var.simplify.
-      subst_map.
 
       eapply wt_subst_bang; eauto with var_db.
     
@@ -1510,6 +1508,7 @@ Proof.
           inversion H; subst; clear H
       end.
       Var.simplify.
+      autorewrite with var_db in HWT2.
       eapply wt_subst2; eauto.
 
   * (* Meas *)
@@ -1606,6 +1605,8 @@ Proof.
 
     + (* Lambda beta reduction *)
       inversion HWT1; subst; clear HWT1.
+      rename H9 into HWT1.
+      autorewrite with var_db in HWT1.
       eapply wt_subst; eauto with var_db.
       { apply Var.Map.Properties.Partition_sym; eauto. }
 
@@ -1625,7 +1626,6 @@ Proof.
 
       eapply wt_subst_bang; eauto with var_db.
       eapply wt_subst_bang; eauto with var_db.
-      constructor; auto with var_db.
 Qed.
 
 (*

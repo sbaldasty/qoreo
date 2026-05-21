@@ -249,6 +249,12 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
           (M.add y b (M.add x a m)).
   Admitted.
 
+  Lemma add_add_eq : forall A x (a b : A) m,
+    M.Equal 
+      (M.add x a (M.add x b m))
+      (M.add x a m).
+  Admitted.
+
   Lemma remove_empty : forall A x,
     M.Equal (M.remove x (@M.empty A))
       (@M.empty A).
@@ -922,7 +928,7 @@ Module Var.
   #[global] Hint Rewrite @Map.Proofs.empty_map_empty : var_db.
   #[global] Hint Rewrite @Map.Proofs.concat_disjoint : var_db.
   #[global] Hint Rewrite Map.Proofs.add_remove_eq : var_db.
-
+  #[global] Hint Rewrite Map.Proofs.add_add_eq : var_db.
 
   (* separate out more expensive resolves into extra_var_db *)
   #[global] Hint Resolve Map.empty_1 : var_db.  
@@ -1154,6 +1160,7 @@ Module Actor.
   #[global] Hint Resolve @Map.Proofs.singleton_remove : actor_db.
   #[global] Hint Rewrite @Map.Proofs.concat_disjoint : actor_db.
   #[global] Hint Rewrite Map.Proofs.add_remove_eq : actor_db.
+  #[global] Hint Rewrite Map.Proofs.add_add_eq : actor_db.
 
   #[global] Hint Resolve Map.Proofs.add_mapsto : actor_db.
   #[global] Hint Resolve Map.Proofs.disjoint_empty_1 Map.Proofs.disjoint_empty_2 : actor_db.
