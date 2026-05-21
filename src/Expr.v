@@ -858,7 +858,6 @@ Proof.
       *)
 Qed.
 
-
 Lemma weakening : forall Γ Δ Θ e τ,
   WellTyped (Var.Map.empty _) Δ Θ e τ ->
   Var.Map.Properties.Disjoint Γ Δ ->
@@ -880,32 +879,134 @@ Hint Resolve subst_not_in : var_db.
 
 Lemma wt_subst_bang : forall e τ Γ Δ Θ x v τ',
   Val v ->
-  WellTyped (Var.Map.empty _) (Var.Map.empty _) (Var.Map.empty _) v (BANG τ) ->
+  WellTyped (Var.Map.empty _) (Var.Map.empty _) (Var.Map.empty _) v τ ->
   WellTyped (Var.Map.add x τ Γ) Δ Θ e τ' ->
   WellTyped Γ Δ Θ (subst x v e) τ'.
 Proof.
-  intros e; induction e;
-    intros ? ? ? ? ? ? ? Hval Hv He;
-    simpl.
-  * (* var *)
-    inversion He; subst; Var.simplify.
-    2:{ (* linear variable *)
-        autorewrite with var_db in *. 
-        compare x t0; auto.
-    
-    inversion He; subst; Var.simplify.
-        absurd (Var.Map.Singleton t0 τ' (Var.Map.empty typ)); auto.
-        unfold Var.Map.Singleton.
-        intros Heq. specialize (Heq t0).
-        autorewrite with var_db in Heq. compare t0 t0; discriminate.
-        autorewrite with var_db.
-        vsimpl.
-    admit.
-    admit.
-    admit.
-    }
-Admitted.
+  intros ? ? ? ? ? ? ? ? Hval Hv He.
+  assert (Hdisj : Var.Map.Properties.Disjoint (Var.Map.add x τ Γ) Δ).
+  { eapply wt_disjoint; eauto. }
+  autorewrite with var_db in Hdisj.
+  destruct Hdisj as [Hdisj Hin].
+  dependent induction e;
+    simpl;
+    try rename t0 into y;
+    inversion He; subst; clear He;
+    vsimpl;
 
+    reflect_partition;
+    autorewrite with var_db in *;
+    repeat match goal with
+    | [H : ~ (_ \/ _) |- _ ] =>
+      apply Decidable.not_or in H
+    | [ H : _ /\ _ |- _ ] => destruct H
+    end;
+
+    try (econstructor; eauto with var_db; 
+          try Var.Map.Tactics.partition_concat;
+          fail).
+  *  (* linear variable *)
+      compare x y.
+      apply WTQVar; auto with var_db.
+  * (* non-linear variable *)
+      compare x y.
+      { (* x=y *)
+        assert (τ = τ') by intuition.
+        subst.
+        apply weakening; auto.
+      }
+      { (* x <> y *)
+        apply WTCVar; auto with var_db.
+        intuition.
+      }
+
+  * (* LetIn *)
+    eapply (WTLetIn Δ1 Δ2 Θ1 Θ2); eauto;
+      try Var.Map.Tactics.partition_concat.
+    compare x y.
+    { (* x = y *)  compare x x; auto. }
+    compare y x.
+    eapply IHe2; eauto;
+      [ | Var.simplify ].
+    {
+      autorewrite with var_db. intuition.
+      apply Var.Map.Proofs.disjoint_remove_1; auto.
+    }
+
+  * (* Bang *)
+    econstructor; auto with var_db.
+    eapply IHe; eauto with var_db.
+    Var.simplify.
+
+  * (* LetBang *)
+    eapply (WTLetBang _ Δ1 Δ2 Θ1 Θ2); eauto;
+      try Var.Map.Tactics.partition_concat.
+    compare x y.
+    { (* x = y *) rewrite add_add_eq in *.
+      auto.
+    }
+    {
+      eapply IHe2; eauto;
+        [ | Var.simplify ].
+      rewrite Var.Map.MProofs.Proofs.add_neq_sym; auto.
+    }
+
+  * (* LetPair *) rename y into y1, t1 into y2.
+    eapply (WTLetPair Δ1 Δ2 Θ1 Θ2); eauto;
+      try Var.Map.Tactics.partition_concat.
+    compare x y1; compare x y2; auto.
+    {
+      reduce_eq_dec.
+      autorewrite with var_db in *.
+      reduce_eq_dec.
+      auto.
+    }
+    {
+      reduce_eq_dec; auto.
+    }
+    (* x <> y1 /\ x <> y2 *)
+    repeat reduce_eq_dec.
+    autorewrite with var_db in *.
+    repeat reduce_eq_dec.
+    
+    eapply IHe2; [auto | eauto | eauto | | Var.simplify].
+    {
+      autorewrite with var_db.
+      intuition.
+      repeat apply Var.Map.Proofs.disjoint_remove_1; auto.
+    }
+    
+  * (* Lambda *)
+    econstructor; eauto with var_db.
+    compare x y; reduce_eq_dec; auto.
+    eapply IHe; [auto | eauto | eauto | | Var.simplify].
+    {
+      autorewrite with var_db.
+      intuition.
+      apply Var.Map.Proofs.disjoint_remove_1; auto.
+    }
+
+  * (* Fix *)
+    rename y into f, t1 into y.
+    econstructor; eauto with var_db.
+    compare f x; reduce_eq_dec.
+    {
+      rewrite (Var.Map.MProofs.Proofs.add_neq_sym _ f y) in *;
+        auto.
+      rewrite add_add_eq in *.
+      rewrite <- (Var.Map.MProofs.Proofs.add_neq_sym _ f y) in *;
+        auto.
+    }
+    compare y x; reduce_eq_dec.
+    {
+      rewrite add_add_eq in *; auto.
+    }
+    eapply IHe;
+      [ auto | eauto |
+      | Var.simplify | Var.simplify ].
+    rewrite (Var.Map.MProofs.Proofs.add_neq_sym _ x f); auto.
+    rewrite (Var.Map.MProofs.Proofs.add_neq_sym _ x y); auto.
+Qed.
 
 
 Lemma wt_subst : forall e Θ1 Θ2 τ Γ Δ Θ x v τ',
