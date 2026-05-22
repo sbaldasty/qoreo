@@ -50,6 +50,23 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
 
   Module Proofs.
 
+
+  #[local] Existing Instance FSetProperties.Equal_ST.
+  Ltac compare x y :=
+    let Heq := fresh "Heq" in
+    destruct (E.eq_dec x y) as [Heq | Heq];
+      try (rewrite <- Heq in *; clear Heq);
+      try contradiction;
+      try match goal with
+      | [ H : ~ E.eq ?x ?x |- _ ] => contradict H; reflexivity
+      end.
+
+  Ltac reduce_eq_dec :=
+    match goal with
+    | [ |- context[E.eq_dec ?x ?y] ] => compare x y
+    | [ H : context[E.eq_dec ?x ?y] |- _ ] => compare x y
+    end.
+
   #[local] Instance singletonProper : forall A,
     Proper (E.eq ==> @eq A ==> @M.Equal A ==> iff) (@Singleton A).
   Proof.
@@ -127,17 +144,22 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       destruct (M.find z m1); auto.
   Qed.
 
+  (*
   Lemma domain_add_iff : forall A x z (a : A) m0 m,
     Add x a m0 m ->
     FSet.In z (domain m) <-> (x = z) \/ FSet.In z (domain m0).
+  Proof.
+    intros ? ? ? ? ? ? Hadd.
+    unfold Add in Hadd.
+    split; [intros Hin | intros [Heq | Hin]].
+    * destruct (E.eq_dec x z) as [Heq | Heq].
+    Search E.eq @eq.
+    
+    destruct ompare x z. auto.
   Admitted.
-
-  Lemma domain_remove : forall A x m,
-    FSet.Equal (domain (remove x m)) (FSet.remove x (@domain A m)).
-  Admitted.
+  *)
 
   (** Domain *)
-  #[local] Existing Instance FSetProperties.Equal_ST.
   #[local] Instance domainProper : forall A,
     Proper (@M.Equal A ==> @FSet.Equal) (@domain A).
   Proof.
@@ -151,7 +173,167 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       repeat rewrite FSetProperties.add_iff.
       tauto.
   Qed.
-      
+
+  Lemma domain_Empty : forall A (m : t A),
+    M.Empty m ->
+    FSet.Equal (domain m) FSet.empty.
+  Proof.
+    intros.
+    unfold domain.
+    apply fold_Empty; auto with qoreo_db.
+    { apply FSetProperties.Equal_ST. }
+  Qed.
+  Lemma Add_add : forall A x (a : A) m m',
+    Add x a m m' <-> Equal m' (M.add x a m).
+  Proof.
+    intros. unfold Add. split; auto.
+  Qed.
+  #[local] Hint Rewrite Add_add : qoreo_db.
+
+
+Require Import Setoid.
+  Lemma domain_add' :  forall A x (a : A) m,
+    FSet.Equal (domain (M.add x a m))
+               (FSet.add x (domain (M.remove x m))).
+  Proof.
+    intros.
+
+    setoid_replace (add x a m) with (add x a (remove x m)).
+      2:{
+        intros z. autorewrite with qoreo_db.
+        compare x z; auto.
+      }
+    unfold domain.
+      rewrite fold_add.
+      + reflexivity.
+      + apply FSetProperties.Equal_ST.
+      + clear x a m.
+        intros x1 x2 Hx a1 a2 Ha X1 X2 HX.
+        rewrite HX. rewrite Hx.
+        reflexivity.
+      + intros k k' ? ? X Heq.
+        intros z.
+        repeat rewrite FSetProperties.add_iff.
+        intuition.
+      + apply remove_1; auto. reflexivity.
+  Qed.
+  (* #[local] Hint Rewrite domain_add' : qoreo_db.*)
+
+
+
+  Lemma domain_remove : forall A m x,
+    FSet.Equal (domain (remove x m)) (FSet.remove x (@domain A m)).
+  Proof.
+    intros A m x z.
+    rewrite FSetProperties.remove_iff.
+    
+    induction m using map_induction.
+    * rewrite (domain_Empty _ m); auto.
+      rewrite (domain_Empty _ (remove x m)).
+      2:{
+        unfold Empty in *.
+        intros y b Hmaps.
+        apply remove_3 in Hmaps.
+        apply H in Hmaps; contradiction.
+      }
+      split; [intros Hin; split | intros [Hin Heq]];
+        auto.
+      apply FSetProperties.empty_iff in Hin. contradiction.
+
+    * rewrite Add_add in H0.
+      rewrite H0; clear m2 H0.
+      compare x x0.
+      + (* if equal *)
+        setoid_replace (remove x (add x e m1))
+          with (remove x m1).
+        2:{
+          intros w. autorewrite with qoreo_db.
+          compare x w; auto.
+        }
+        rewrite IHm1.
+        destruct IHm1 as [IHm1 IHm2].
+        rewrite domain_add'.
+        rewrite FSetProperties.add_iff.
+        split; intros [Hin Hneq]; split; auto.
+        {
+          destruct Hin as [ | Hin]; try contradiction.
+          apply IHm1 in Hin.
+          destruct Hin as [Hin _ ].
+          auto.
+        }
+
+      + (* if not equal *)
+        setoid_replace (remove x (add x0 e m1))
+          with (add x0 e (remove x m1)).
+        2:{
+          intros w. autorewrite with qoreo_db.
+          compare x w; auto. compare x0 w; auto.
+        }
+        repeat rewrite domain_add'.
+        repeat rewrite FSetProperties.add_iff.
+        setoid_replace (remove x0 (remove x m1))
+          with (remove x (remove x0 m1)).
+        2:{
+          intros w. autorewrite with qoreo_db.
+          compare x0 w; auto.
+          compare x w; auto.
+        }
+        setoid_replace (remove x0 m1)
+          with m1.
+        2:{
+          intros w. autorewrite with qoreo_db.
+          compare x0 w; auto.
+          (* ~ In w m1 *)
+          apply F.not_find_in_iff in H; auto.
+        }
+        rewrite IHm1.
+        split; intros H0.
+        {
+          destruct H0 as [H0 |[Hin Hneq]]; auto.
+          { 
+            rewrite H0 in *; clear x0 H0.
+            split; auto. left; reflexivity.
+          }
+        }
+        {
+          destruct H0 as [H0 Hneq].
+          tauto.
+        }
+  Qed.
+
+  Lemma domain_add :  forall A x (a : A) m,
+    FSet.Equal (domain (M.add x a m))
+               (FSet.add x (domain m)).
+  Proof.
+    intros.
+    rewrite domain_add'.
+    rewrite domain_remove.
+    intros z.
+    repeat rewrite FSetProperties.add_iff.
+    rewrite FSetProperties.remove_iff.
+    compare x z; intuition.
+  Qed.
+  
+  Lemma domain_In : forall A x (m : t A),
+    FSet.In x (domain m) <-> M.In x m.
+  Proof.
+    intros A x m.
+    induction m using map_induction.
+    * rewrite domain_Empty; auto.
+      Search FSet.In FSet.empty.
+      rewrite FSetProperties.empty_iff.
+      split; [inversion 1 | intros [a Hmaps]].
+      apply H in Hmaps.
+      contradiction.
+
+    * rewrite Add_add in H0.
+      rewrite H0; clear m2 H0.
+      rewrite domain_add.
+      rewrite FSetProperties.add_iff.
+      autorewrite with qoreo_db.
+      rewrite IHm1.
+      reflexivity.
+  Qed.
 
 
   (** Lemma about FSets *)
@@ -201,20 +383,6 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
   Qed.
   #[local] Hint Rewrite remove_map : qoreo_db.
 
-  Ltac compare x y :=
-    let Heq := fresh "Heq" in
-    destruct (E.eq_dec x y) as [Heq | Heq];
-      try (rewrite <- Heq in *; clear Heq);
-      try contradiction;
-      try match goal with
-      | [ H : ~ E.eq ?x ?x |- _ ] => contradict H; reflexivity
-      end.
-
-  Ltac reduce_eq_dec :=
-    match goal with
-    | [ |- context[E.eq_dec ?x ?y] ] => compare x y
-    | [ H : context[E.eq_dec ?x ?y] |- _ ] => compare x y
-    end.
 
   Lemma remove_add : forall A x y (v : A) Gamma,
     M.Equal
@@ -232,28 +400,50 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
   Lemma add_remove_eq : forall A x (a : A) m,
     M.Equal (M.add x a (M.remove x m))
                   (M.add x a m).
-  Admitted.
-  #[local] Hint Rewrite add_remove_eq : var_db.
+  Proof.
+    intros.
+    intros z.
+    autorewrite with qoreo_db.
+    compare x z; auto.
+  Qed.
+  #[local] Hint Rewrite add_remove_eq : qoreo_db.
 
   Lemma add_mapsto : forall A x (a : A) m,
     M.MapsTo x a m ->
     M.Equal (M.add x a m)
                   m.
-  Admitted.
+  Proof.
+    intros.
+    intros z.
+    autorewrite with qoreo_db.
+    compare x z; auto.
+    apply F.find_mapsto_iff in H; auto.
+  Qed.
   #[local] Hint Resolve add_mapsto : var_db.
 
 
   Lemma add_neq_sym : forall A x y (a b : A) m,
-  x <> y ->
+  (*x <> y ->*)
+  ~ E.eq x y ->
   M.Equal (M.add x a (M.add y b m))
           (M.add y b (M.add x a m)).
-  Admitted.
+  Proof.
+    intros.
+    intros z.
+    autorewrite with qoreo_db.
+    repeat reduce_eq_dec; auto.
+  Qed.
 
   Lemma add_add_eq : forall A x (a b : A) m,
     M.Equal 
       (M.add x a (M.add x b m))
       (M.add x a m).
-  Admitted.
+  Proof.
+    intros.
+    intros z.
+    autorewrite with qoreo_db.
+    repeat reduce_eq_dec; auto.
+  Qed.
 
   Lemma remove_empty : forall A x,
     M.Equal (M.remove x (@M.empty A))
@@ -313,7 +503,14 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
 
   Lemma add_not_Empty : forall A x (a : A) m,
     ~ M.Empty (M.add x a m).
-  Admitted.
+  Proof.
+    intros.
+    intros Hempty.
+    unfold Empty in Hempty.
+    apply (Hempty x a).
+    Search MapsTo add.
+    apply add_1. reflexivity.
+  Qed.
 
   Lemma singleton_singleton : forall A x (a : A),
     Singleton x a (M.add x a (M.empty _)).
@@ -341,12 +538,22 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
   Lemma singleton_empty : forall A x a,
     Singleton x a (M.empty A)
     <-> False.
-  Admitted.
+  Proof.
+    intros. unfold Singleton.
+    split; intros H; try contradiction.
+    specialize (H x).
+    autorewrite with qoreo_db in H.
+    compare x x; try discriminate.
+  Qed.
 
 
+  (* not quite true because m might be (M.add y b' empty)...
+    also I'm having trouble with the x=y conclusion.
+  *)
   Lemma singleton_add_inversion : forall A x (a : A) y b m,
     Singleton x a (M.add y b m) ->
     x = y /\ a = b /\ M.Empty m.
+  Proof.
   Admitted.
 
   Ltac subst_eq_hypothesis_fwd m :=
@@ -476,7 +683,15 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
   Lemma disjoint_remove_1 : forall {A} (m1 m2 : M.t A) x,
     Disjoint m1 m2 ->
     Disjoint (M.remove x m1) m2.
-  Admitted.
+  Proof.
+    intros.
+    unfold Disjoint in *.
+    intros z.
+    Search In remove.
+    rewrite F.remove_in_iff.
+    intros [[Hneq Hin1] Hin2].
+    apply (H z); auto.
+  Qed.
 
   Lemma disjoint_remove_2 : forall {A} (m1 m2 : M.t A) x,
     Disjoint m1 m2 ->
@@ -490,10 +705,43 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
 
   Lemma disjoint_add_1 : forall A m1 m2 x (a : A),
     Disjoint (M.add x a m1) m2 <-> Disjoint m1 m2 /\ ~ M.In x m2.
-  Admitted.
+  Proof.
+    intros.
+    split; intros Hdisj; try split.
+    * intros z [Hin1 Hin2].
+      apply (Hdisj z). split; auto.
+      autorewrite with qoreo_db.
+      auto.
+    * intros Hin2.
+      apply (Hdisj x).
+      split; auto.
+      autorewrite with qoreo_db.
+      left; reflexivity.
+
+    * destruct Hdisj as [Hdisj Hin].
+      intros z [Hin1 Hin2].
+      autorewrite with qoreo_db in Hin1.
+      destruct Hin1 as [Heq | Hin1].
+      { rewrite Heq in Hin; contradiction. }
+      { apply (Hdisj z); auto. }
+  Qed.
   Lemma disjoint_add_2 : forall A m1 m2 x (a : A),
     Disjoint m1 (M.add x a m2) <-> Disjoint m1 m2 /\ ~ M.In x m1.
-  Admitted.
+  Proof.
+    intros.
+    split; [intros Hdisj | intros [Hdisj Hin]];
+      apply disjoint_sym in Hdisj.
+    {
+      apply disjoint_add_1 in Hdisj.
+      destruct Hdisj; split; auto.
+      apply disjoint_sym; auto.
+    }
+    {
+      apply disjoint_sym.
+      apply disjoint_add_1.
+      auto.
+    }
+  Qed.
 
   Ltac reduce_disjoint :=
   repeat match goal with
