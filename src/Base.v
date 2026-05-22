@@ -942,16 +942,35 @@ Require Import Setoid.
   Lemma partition_empty_inv1 : forall {A} (Δ1 Δ2 : M.t A),
     Partition (M.empty _) Δ1 Δ2 ->
     M.Equal Δ1 (M.empty _).
-  Admitted.
+  Proof.
+    intros ? ? ? [Hdisj Hmapsto].
+    intros z.
+    autorewrite with qoreo_db.
+    destruct (find z Δ1) eqn:Hfind; auto.
+    exfalso.
+    absurd (MapsTo z a (empty A)).
+    { autorewrite with qoreo_db. auto. }
+    {
+      apply Hmapsto.
+      left.
+      apply F.find_mapsto_iff; auto.
+    }
+  Qed.
 
   Lemma partition_empty_inv2 : forall {A} (Δ1 Δ2 : M.t A),
     Partition (M.empty _) Δ1 Δ2 ->
     M.Equal Δ2 (M.empty _).
-  Admitted.
+  Proof.
+    intros ? ? ? Hpart.
+    apply Properties.Partition_sym in Hpart.
+    apply partition_empty_inv1 in Hpart; auto.
+  Qed.
 
+  (* Only true in both directions if f is injective *)
   Lemma partition_map_iff : forall A B (f : A -> B) m m1 m2,
     Partition m m1 m2 <->
     Partition (M.map f m) (M.map f m1) (M.map f m2).
+  Proof.
   Admitted.
 
   Lemma partition_map_inv : forall A B (f : A -> B) m n1 n2,
@@ -962,17 +981,32 @@ Require Import Setoid.
       M.Equal n2 (M.map f m2)
       /\
       Partition m m1 m2.
+  Proof.
   Admitted.
 
   Lemma partition_empty1_eq : forall A m m0,
       Partition m (M.empty A) m0 ->
       M.Equal m m0.
-  Admitted.
+  Proof.
+    intros ? ? ? Hpart.
+    reflect_partition.
+    intros z. autorewrite with qoreo_db.
+    auto.
+  Qed.
 
   Lemma partition_empty2_eq : forall A m m0,
       Partition m m0 (M.empty A) ->
       M.Equal m m0.
-  Admitted.
+  Proof.
+    intros ? ? ? Hpart.
+    reflect_partition.
+    intros z. autorewrite with qoreo_db.
+    destruct (find z m0); auto.
+  Qed.
+
+  Search remove In.
+  #[local] Hint Rewrite F.remove_in_iff : qoreo_db.
+  #[local] Hint Rewrite F.remove_mapsto_iff : qoreo_db.
 
   Lemma partition_add_inversion : forall A (a : A) x m m1 m2,
     Partition (M.add x a m) m1 m2 ->
@@ -980,7 +1014,40 @@ Require Import Setoid.
     (M.MapsTo x a m1 /\ ~ M.In x m2 /\ Partition m (M.remove x m1) m2)
     \/
     (~ M.In x m1 /\ M.MapsTo x a m2 /\ Partition m m1 (M.remove x m2)).
-  Admitted.
+  Proof.
+    intros ? ? ? ? ? ? Hpart Hin.
+    assert (Hfind : (find x m1 = Some a /\ find x m2 = None) \/ 
+                    (find x m1 = None   /\ find x m2 = Some a)).
+    {
+      reflect_partition.
+      specialize (Heq x). autorewrite with qoreo_db in Heq.
+      reduce_eq_dec.
+      destruct (find x m1) as [b | ] eqn:Hfind1.
+      + left. inversion Heq; subst; clear Heq. split; auto.
+        destruct (find x m2) as [? | ] eqn:Hfind2; auto.
+        (* contradiction *)
+        exfalso. apply (Hdisj x). 
+        repeat rewrite F.in_find_iff.
+        rewrite Hfind1, Hfind2.
+        split; discriminate.
+      + right. auto.
+    }
+
+    apply (partition_remove x) in Hpart.
+    rewrite remove_add in Hpart.
+    reduce_eq_dec.
+    rewrite (remove_not_in _ x m) in Hpart; auto.
+    
+    destruct Hfind as [[Hfind1 Hfind2] | [Hfind1 Hfind2]].
+    + apply F.find_mapsto_iff in Hfind1.
+      apply F.not_find_in_iff in Hfind2.
+      left. split; auto. split; auto.
+      rewrite (remove_not_in _ x m2) in Hpart; auto.
+    + apply F.find_mapsto_iff in Hfind2.
+      apply F.not_find_in_iff in Hfind1.
+      right. split; auto. split; auto.
+      rewrite (remove_not_in _ x m1) in Hpart; auto.
+  Qed.
 
   Ltac decide_equal :=
     repeat match goal with
