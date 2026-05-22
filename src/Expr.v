@@ -1350,7 +1350,7 @@ Proof.
 Qed.
 
 
-Lemma step_weakening : forall e refs ρ e' refs' ρ',
+Lemma step_inversion : forall e refs ρ e' refs' ρ',
   
   step e refs ρ e' refs' ρ' ->
 
@@ -1365,6 +1365,26 @@ Proof.
 Admitted.
 
 
+Lemma step_weakening_1 : forall Θ1 Θ1' Θ2 e Θ cfg e' Θ' cfg',
+  step e Θ1 cfg e' Θ1' cfg' ->
+  Var.Map.Partition Θ Θ1 Θ2 ->
+  Config.WellScoped Θ2 cfg ->
+  Var.Map.Partition Θ' Θ1' Θ2 ->
+  step e Θ cfg e' Θ' cfg'.
+Admitted.
+Lemma step_weakening_2 : forall Θ1 Θ2 Θ2' e Θ cfg e' Θ' cfg',
+  step e Θ2 cfg e' Θ2' cfg' ->
+  Var.Map.Partition Θ Θ1 Θ2 ->
+  Config.WellScoped Θ1 cfg ->
+  Var.Map.Partition Θ' Θ1 Θ2' ->
+  step e Θ cfg e' Θ' cfg'.
+Proof.
+  intros ? ? ? ? ? ? ? ? ? Hstep Hpart Hws Hpart'.
+  eapply step_weakening_1; [eauto | | eauto | ].
+  apply Var.Map.Properties.Partition_sym; auto.
+  apply Var.Map.Properties.Partition_sym; auto.
+Qed.
+
 Ltac step_weakening_tac :=
   match goal with
   | [ Hstep : step ?e ?refs ?ρ ?e' ?refs' ?ρ',
@@ -1373,7 +1393,7 @@ Ltac step_weakening_tac :=
       let refs1 := fresh "refs1" in
       let Hstep1 := fresh "Hstep1" in
       let Hpart1 := fresh "Hpart1" in
-      edestruct (step_weakening _ _ _ _ _ _ Hstep) as [refs1 [Hstep1 Hpart1]]; eauto
+      edestruct (step_inversion _ _ _ _ _ _ Hstep) as [refs1 [Hstep1 Hpart1]]; eauto
   end.
 
 
@@ -1628,42 +1648,243 @@ Proof.
       eapply wt_subst_bang; eauto with var_db.
 Qed.
 
-(*
 
-Theorem progress : forall e τ Γ Δ,
-  WellTyped Γ Δ e τ ->
+Lemma step_WellScoped_disjoint : forall Θ2 e Θ1 cfg e' Θ1' cfg',
+  step e Θ1 cfg e' Θ1' cfg' ->
+  Var.Map.Properties.Disjoint Θ1 Θ2 ->
+  Config.WellScoped Θ2 cfg ->
+  Var.Map.Properties.Disjoint Θ1' Θ2.
+Admitted.
+
+
+Ltac simplify_val :=
+  repeat match goal with
+  | [ Hval : Val ?e, Hwt : WellTyped _ _ _ ?e ?τ |- _ ] =>
+    match τ with
+    | BIT => inversion Hwt; subst; inversion Hval; subst; clear Hval Hwt
+    | QUBIT  => inversion Hwt; subst; inversion Hval; subst; clear Hval Hwt
+    | Tensor _ _ => inversion Hwt; subst; inversion Hval; subst; clear Hval Hwt
+    | Lolli _ _ => inversion Hwt; subst; inversion Hval; subst; clear Hval Hwt
+    | BANG _ => inversion Hwt; subst; inversion Hval; subst; clear Hval Hwt
+    end
+  end.
+
+Ltac ws_partition_tac :=
+  match goal with
+  | [Hpart : Var.Map.Partition ?Θ ?Θ1 ?Θ2,
+     H : Config.WellScoped ?θ ?cfg |- _ ] =>
+     let H' := fresh "H" in
+     assert (H' : Config.WellScoped Θ1 cfg /\ Config.WellScoped Θ2 cfg)
+     by (apply Config.WellScoped_concat; reflect_partition; auto);
+     destruct H'
+  end.
+Ltac ws_step_tac :=
+  match goal with
+  | [ Hstep : step ?e ?Θ1 ?cfg ?e' ?Θ1' ?cfg' |- Var.Map.Partition _ ?Θ1' ?Θ2 ] =>
+      reflect_partition; [ | reflexivity];
+      eapply step_WellScoped_disjoint; eauto
+  | [ Hpart : Var.Map.Partition ?Θ ?Θ1 ?Θ2,
+      Hstep : step ?e ?Θ1 ?cfg ?e' ?Θ1' ?cfg' |- _ ] =>
+      let H' := fresh "H" in
+      assert (H' : Var.Map.Partition (Var.Map.concat Θ1' Θ2) Θ1' Θ2)
+      by (reflect_partition; [ | reflexivity];
+          eapply step_WellScoped_disjoint; eauto)
+  end.
+
+
+Theorem progress : forall e τ Γ Δ Θ,
+  WellTyped Γ Δ Θ e τ ->
   forall cfg,
-  Config.WellScoped cfg ->
+  Config.WellScoped Θ cfg ->
   Var.Map.Empty Γ ->
   Var.Map.Empty Δ ->
-  WellFormed (e, cfg) ->
-  Val e \/ exists e' cfg', (e, cfg) ~> (e', cfg').
+  Val e \/ exists e' Θ' cfg', step e Θ cfg e' Θ' cfg'.
 Proof.
-  intros e τ Γ Δ Hwt.
-  induction Hwt; intros cfg Hscoped HΓ HΔ Hwf.
-  * contradict H.
-    unfold Var.Map.Singleton.
-    Var.simplify.
-    admit (* lemma *).
-  * exfalso. Var.simplify.
-    autorewrite with var_db in *; auto.
-  * Var.simplify.
-    unfold WellFormed in 
-  
-  exfalso.
-    apply (HΓ x τ); auto.
-  * 
-    
-  
+  intros e τ Γ Δ Θ Hwt.
+  induction Hwt; intros cfg Hscoped HΓ HΔ;
+    vsimpl;
+    autorewrite with var_db in *;
+    try contradiction;
+    try (left; auto with var_db; fail).
 
-(*
-Proof.
-  intros n e τ cfg Hwt Hdim.
-  eapply progress_gen; eauto;
-    intros k v Hmap;
-    apply Var.MapFacts.F.empty_mapsto_iff in Hmap;
-    exact Hmap.
+  * (* Let *)
+    ws_partition_tac.
+    
+    edestruct IHHwt1 as [Hv1 | [e1' [Θ1' [cfg' Hstep1]]]];
+      eauto with var_db.
+    + (* e1 is a value *)
+      right. eexists. eexists. eexists.
+      eapply LetB; auto.
+
+    + (* e1 can take a step *)
+      right. eexists. eexists. eexists.
+      apply LetC; eauto.
+      eapply step_weakening_1; eauto;
+        ws_step_tac.
+
+  * (* Let! *)
+    ws_partition_tac.
+
+    edestruct IHHwt1 as [Hv1 | [e1' [Θ1' [cfg' Hstep1]]]];
+      eauto with var_db.
+    + (* e1 is a value *)
+      (* e1 must be of the form (Bang e1') *)
+      simplify_val.
+      right. eexists. eexists. eexists.
+      eapply LetBangB; auto.
+
+    + (* e1 can take a step *)
+      right. eexists. eexists. eexists.
+      apply LetBangC; eauto.
+      eapply step_weakening_1; eauto;
+        ws_step_tac.
+
+  * (* If *)
+    ws_partition_tac.
+
+    edestruct IHHwt1 as [Hv1 | [e1' [Θ1' [cfg' Hstep1]]]];
+      eauto with var_db.
+    + (* e1 is a value *)
+      (* e1 must be of the form Bit b *)
+      simplify_val.
+      right. eexists. eexists. eexists.
+      eapply IfB; auto.
+
+    + (* e1 can take a step *)
+      right. eexists. eexists. eexists.
+      apply IfC; eauto.
+      eapply step_weakening_1; eauto;
+        ws_step_tac.
+
+  * (* Pair *)
+    ws_partition_tac.
+    edestruct IHHwt1 as [Hv1 | [e1' [Θ1' [cfg' Hstep1]]]];
+      eauto with var_db.
+    2:{ (* e1 can take a step *)
+      right. eexists. eexists. eexists.
+      apply PairC1; eauto.
+      eapply step_weakening_1; eauto;
+        ws_step_tac.
+    }
+    edestruct IHHwt2 as [Hv2 | [e2' [Θ2' [cfg' Hstep2]]]];
+      eauto with var_db.
+    { (* e2 can take a step *)
+      right. eexists. eexists. eexists.
+      apply PairC2; eauto.
+      eapply step_weakening_2; [eauto | eauto with var_db | | ];
+        auto.
+      {
+        reflect_partition; try reflexivity.
+        apply Var.Map.Proofs.disjoint_sym.
+        eapply step_WellScoped_disjoint; eauto.
+        apply Var.Map.Proofs.disjoint_sym; auto.
+      }
+    }
+
+  * (* LetPair *)
+    ws_partition_tac.
+    edestruct IHHwt1 as [Hv1 | [e1' [Θ1' [cfg' Hstep1]]]];
+      eauto with var_db.
+    + (* e1 is a value *)
+      (* e1 must be of the form Bit b *)
+      simplify_val.
+      right. eexists. eexists. eexists.
+      eapply LetPairB; auto with var_db.
+
+    + (* e1 can take a step *)
+      right. eexists. eexists. eexists.
+      apply LetPairC; eauto.
+      eapply step_weakening_1; eauto;
+        ws_step_tac.
+  
+  * (* Meas *)
+    edestruct IHHwt as [Hv | [e' [Θ' [cfg' Hstep]]]];
+      eauto with var_db.
+    + (* e' is a value -- must be a qref *)
+      simplify_val.
+      right. eexists. eexists. eexists.
+      eapply MeasB; eauto.
+      reflexivity.
+
+    + (* e' can take a step *)
+      right. eexists. eexists. eexists.
+      apply MeasC; eauto.
+
+  * (* New *)
+    edestruct IHHwt as [Hv | [e' [Θ' [cfg' Hstep]]]];
+      eauto with var_db.
+    + (* e' is a value -- must be a bit *)
+      simplify_val.
+      right. eexists. eexists. eexists.
+      eapply New0; eauto.
+      reflexivity.
+
+    + (* e' can take a step *)
+      right. eexists. eexists. eexists.
+      apply NewC; eauto.
+
+  * (* Unitary *)
+    edestruct IHHwt as [Hv | [e' [Θ' [cfg' Hstep]]]];
+      eauto with var_db.
+    
+    + (* e' is a value *)
+
+      (* τ = Qubit or Qubit ** Qubit *)
+      assert (Hτ : τ = QUBIT \/ τ = Tensor QUBIT QUBIT).
+      { destruct U; inversion H; subst; auto. }
+      destruct Hτ as [Hτ | Hτ]; rewrite Hτ in *.
+      - (* τ = QUBIT *)
+        simplify_val.
+        right. eexists. eexists. eexists.
+        eapply UnitaryB1; eauto.
+
+      - (* τ = Tensor QUBIT QUBIT *)
+        simplify_val.
+        right. eexists. eexists. eexists.
+        eapply UnitaryB2; eauto.
+        {
+          vsimpl. unfold Var.Map.Singleton in *.
+          vsimpl.
+          reflect_partition.
+          decide_equal.
+        }
+
+    + (* e can take a step *)
+      right. eexists. eexists. eexists.
+      apply UnitaryC; eauto.
+
+  * (* App *)
+    ws_partition_tac.
+    edestruct IHHwt1 as [Hv1 | [e1' [Θ1' [cfg' Hstep1]]]];
+      eauto with var_db.
+    2:{ (* e1 can take a step *)
+      right. eexists. eexists. eexists.
+      apply AppC1; eauto.
+      eapply step_weakening_1; eauto;
+        ws_step_tac.
+    }
+    edestruct IHHwt2 as [Hv2 | [e2' [Θ2' [cfg' Hstep2]]]];
+      eauto with var_db.
+    2:{ (* e2 can take a step *)
+      right. eexists. eexists. eexists.
+      apply AppC2; eauto.
+      eapply step_weakening_2; eauto.
+      {
+        reflect_partition; try reflexivity.
+        apply Var.Map.Proofs.disjoint_sym.
+        eapply step_WellScoped_disjoint; eauto.
+        apply Var.Map.Proofs.disjoint_sym; auto.
+      }
+    }
+    (* both e1 and e2 are values *)
+    simplify_val.
+    - (* v1 is a lambda *)
+      right. eexists. eexists. eexists.
+      eapply AppB; eauto.
+
+    - (* v1 is a fix *)
+      right. eexists. eexists. eexists.
+      eapply AppFixB; eauto.
+
+Unshelve. exact true.
 Qed.
-*)
-Abort.
-*)

@@ -337,6 +337,13 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
   Qed.
   #[local] Hint Resolve @singleton_remove : qoreo_db.
 
+
+  Lemma singleton_empty : forall A x a,
+    Singleton x a (M.empty A)
+    <-> False.
+  Admitted.
+
+
   Lemma singleton_add_inversion : forall A x (a : A) y b m,
     Singleton x a (M.add y b m) ->
     x = y /\ a = b /\ M.Empty m.
@@ -929,6 +936,7 @@ Module Var.
   #[global] Hint Rewrite @Map.Proofs.concat_disjoint : var_db.
   #[global] Hint Rewrite Map.Proofs.add_remove_eq : var_db.
   #[global] Hint Rewrite Map.Proofs.add_add_eq : var_db.
+  #[global] Hint Rewrite Map.Proofs.singleton_empty : var_db.
 
   (* separate out more expensive resolves into extra_var_db *)
   #[global] Hint Resolve Map.empty_1 : var_db.  
@@ -978,10 +986,23 @@ Module Config.
 
   Record WellScoped (refs : Var.Map.t nat) (cfg : t) := {
     wf_qstate : Matrix.WF_Matrix (qstate cfg);
-    wf_qrefs : List.Forall
+    (*wf_qrefs : List.Forall
               (fun x => snd x < dim cfg)%nat
               (Var.Map.elements refs)
+              *)
+    wf_qrefs : forall x, Var.Map.In x refs -> (x < dim cfg)%nat
   }.
+
+
+  Global Instance WellScopedProper : Proper (Var.Map.Equal ==> eq ==> iff) Config.WellScoped.
+  Proof.
+    intros refs1 refs2 Hrefs cfg1 cfg2 Hcfg; subst.
+    split; intros [wf_qstate wf_qrefs].
+    + split; auto;
+      intros x; setoid_rewrite <- Hrefs; auto.
+    + split; auto;
+      intros x; setoid_rewrite Hrefs; auto.
+  Qed.
 
   
     Definition find (x : Var.t) refs : nat :=
@@ -1096,6 +1117,26 @@ Module Config.
   Qed.
   *)
 
+
+  Lemma WellScoped_concat : forall Θ1 Θ2 cfg,
+    Config.WellScoped Θ1 cfg /\ Config.WellScoped Θ2 cfg
+    <->
+    Config.WellScoped (Var.Map.concat Θ1 Θ2) cfg.
+  Proof.
+    intros ? ? ?.
+    split.
+    + intros [[wf ws1] [_ ws2]].
+      split; auto.
+      intros x Hin. autorewrite with var_db in Hin.
+      destruct Hin as [Hin | Hin];
+        [apply ws1 | apply ws2]; auto.
+    + intros [wf ws].
+      split; split; auto;
+      intros x Hin; apply ws;
+      autorewrite with var_db; auto.
+  Qed.
+  Hint Rewrite WellScoped_concat : var_db.
+
 End Config.
 
 (* This could be instantiated in different ways. *)
@@ -1161,6 +1202,7 @@ Module Actor.
   #[global] Hint Rewrite @Map.Proofs.concat_disjoint : actor_db.
   #[global] Hint Rewrite Map.Proofs.add_remove_eq : actor_db.
   #[global] Hint Rewrite Map.Proofs.add_add_eq : actor_db.
+  #[global] Hint Rewrite Map.Proofs.singleton_empty : actor_db.
 
   #[global] Hint Resolve Map.Proofs.add_mapsto : actor_db.
   #[global] Hint Resolve Map.Proofs.disjoint_empty_1 Map.Proofs.disjoint_empty_2 : actor_db.
