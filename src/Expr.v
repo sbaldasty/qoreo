@@ -745,12 +745,78 @@ Proof.
   eapply weakening_gen; eauto with var_db.
 Qed.
 
-Lemma subst_not_in : forall x v e Γ Δ Θ τ,
+Lemma partition_not_in_inversion : forall A (m m1 m2 : Var.Map.t A) x,
+  Var.Map.Partition m m1 m2 ->
+  ~ Var.Map.In x m <->
+  ~ Var.Map.In x m1 /\ ~ Var.Map.In x m2.
+Admitted.
+
+Ltac partition_not_in_inversion :=
+    match goal with
+    | [ Hpart : Var.Map.Partition ?m ?m1 ?m2,
+        Hin : ~ Var.Map.In ?x ?m |- _ ] =>
+      let Hin' := fresh "Hin" in
+      assert (Hin' : ~ Var.Map.In x m1 /\ ~ Var.Map.In x m2)
+      by (eapply partition_not_in_inversion; eauto);
+      destruct Hin'
+    end.
+
+
+Lemma subst_not_in : forall e x v Γ Δ Θ τ,
   WellTyped Γ Δ Θ e τ ->
   ~ Var.Map.In x Γ ->
   ~ Var.Map.In x Δ ->
   subst x v e = e.
-Admitted.
+Proof.
+  intros e; induction e; intros y v ? ? ? ? Hwt HΓ HΔ;
+    simpl; try rename t0 into x;
+    inversion Hwt; subst; clear Hwt;
+    try partition_not_in_inversion;
+    auto;
+    try (
+      try (erewrite IHe; eauto);
+      try (erewrite IHe1; eauto);
+      try (erewrite IHe2; eauto);
+      try (erewrite IHe3; eauto);
+      fail).
+  * compare y x; auto.
+    exfalso.
+    apply HΔ.
+    unfold Var.Map.Singleton in *. vsimpl.
+    autorewrite with var_db. auto.
+  * compare y x; auto.
+    exfalso.
+    apply HΓ. exists τ; auto.
+  *
+    erewrite IHe1; eauto.
+    repeat reduce_eq_dec; auto.
+    erewrite IHe2; eauto;
+      autorewrite with var_db;
+      intuition.
+  * erewrite IHe1; eauto.
+    repeat reduce_eq_dec; auto.
+    compare y x; auto.
+    erewrite IHe2; eauto;
+      autorewrite with var_db;
+      intuition.
+  * rename t1 into z.
+    erewrite IHe1; eauto.
+    compare y x; auto.
+    compare y z; auto.
+    erewrite IHe2; eauto;
+      autorewrite with var_db;
+      intuition.
+  * compare y x; auto.
+    erewrite IHe; eauto;
+      autorewrite with var_db;
+      intuition.
+  * rename x into f, t1 into x.
+    compare y f; auto.
+    compare y x; auto.
+    erewrite IHe; eauto;
+      autorewrite with var_db;
+      intuition.
+Qed.
 Hint Resolve subst_not_in : var_db.
 
 #[global] Hint Resolve weakening : var_db.
