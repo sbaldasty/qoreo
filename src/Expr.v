@@ -734,120 +734,6 @@ Proof.
     {
       reflect_partition; auto; try reflexivity.
     }
-  
-  (*
-  intros ? ? ? ? ? HWT;
-  induction HWT; intros Γ' Hsub Hdisj;
-    vsimpl; simpl in Hdisj;
-    try (econstructor; eauto with var_db;
-      try eapply IHHWT;
-      try eapply IHHWT1;
-      try eapply IHHWT2;
-      eauto;
-      intros;
-      try apply Hdisj; autorewrite with var_db; auto;
-      fail
-    ).
-  *
-    assert (~ Var.Map.In x Γ').
-    {
-      apply Hdisj. autorewrite with var_db. auto.
-    }
-    econstructor; eauto with var_db.
-    + eapply IHHWT1; auto.
-      intros y Hy.
-      apply Hdisj.
-      autorewrite with var_db. intuition.
-    + eapply IHHWT2; auto.
-      {
-        intros z τ0 Hin.
-        autorewrite with var_db in *.
-        intuition.
-      }
-      {
-        intros z Hin.
-        autorewrite with var_db.
-        specialize (Hdisj z).
-        autorewrite with var_db in Hdisj.
-        intuition.
-      }
-  
-  * (* Let! *)
-    econstructor; eauto with var_db.
-    + eapply IHHWT1; auto.
-      intros y Hy.
-      apply Hdisj. autorewrite with var_db. intuition.
-    +
-      
-      eapply IHHWT2; auto.
-      {
-       intros y ? Hin. autorewrite with var_db in *.
-       intuition.
-      }
-      { intros z Hin.
-        specialize (Hdisj z).
-        autorewrite with var_db in *.
-        
-        
-      
-      Hin'. autorewrite with var_db in *.
-        destruct Hin' as [? | Hin']; subst; auto.
-        2:{ revert Hin'. apply Hdisj. autorewrite with var_db. auto. }
-        (* y ∈ vars(e2) *)
-        (* so y ∈ vars(letin) *)
-        (* so y∉ Γ' *)
-        (* so y∉ Γ*)
-      } 
-
-
-  try (econstructor; eauto with var_db;
-      try eapply IHHWT;
-      try eapply IHHWT1;
-      try eapply IHHWT2;
-      eauto;
-      intros;
-      try apply Hdisj; autorewrite with var_db; auto
-          ).
-    {
-      
-    }
-      apply IHe1.
-          intuition.
-          eauto.
-    eapply IHe1.
-    eapply WTLetIn; eauto with var_db.
-    + eapply IHe1; eauto.
-      intros x Hvars; apply Hdisj;
-        autorewrite with var_db.
-      intuition.
-    + eapply IHe2; eauto.
-      intros x Hvars.
-      apply Hdisj; autorewrite with var_db; intuition.
-    + apply Hdisj; autorewrite with var_db; intuition.
-  * 
-
-  * reflect_partition; vsimpl.
-    eapply WTLetBang; eauto with extra_var_db.
-    apply IHHWT2.
-    {
-      intros y σ Hy.
-      autorewrite with var_db in *. intuition.
-    }
-    {
-      vsimpl; auto.
-    }
-
-  * eapply WTFix; eauto.
-    apply IHHWT.
-    intros y τ Hy.
-    autorewrite with var_db in *.
-    destruct Hy as [[Heqf Hmaps] | [Hneqf Hy]].
-    + left; auto.
-    + right; split; auto.
-      destruct Hy as [[Heqx Hmaps] | [Hneqx Hmaps]].
-      - left; auto.
-      - right; split; auto.
-      *)
 Qed.
 
 Lemma weakening : forall Γ Δ Θ e τ,
@@ -997,6 +883,7 @@ Proof.
 Qed.
 
 
+
 Lemma wt_subst : forall e Θ1 Θ2 τ Γ Δ Θ x v τ',
   (*Val v ->*)
   WellTyped (Var.Map.empty _) (Var.Map.empty _) Θ1 v τ ->
@@ -1013,6 +900,8 @@ Proof.
   * (* Var *)
     inversion He; subst; clear He;
       Var.simplify.
+    rewrite Var.Map.Proofs.remove_not_in in H2; auto.
+    vsimpl.    
     reduce_eq_dec.
     auto with var_db.    
 
@@ -1395,22 +1284,6 @@ Ltac step_weakening_tac :=
       let Hpart1 := fresh "Hpart1" in
       edestruct (step_inversion _ _ _ _ _ _ Hstep) as [refs1 [Hstep1 Hpart1]]; eauto
   end.
-
-
-(*
-Lemma well_typed_qubit : forall {A} (refs : Var.Map.t A) q τ,
-  WellTyped (Var.Map.empty typ) (Var.Map.map (fun _ => QUBIT) refs) (Var q) τ ->
-  τ = QUBIT.
-Proof.
-    intros ? ? ? ? HWT.
-    inversion HWT; subst; clear HWT.
-    2:{ autorewrite with var_db in *. contradiction. }
-    unfold Var.Map.Singleton in *.
-    specialize (H2 q).
-    autorewrite with var_db in *.
-    destruct (Var.Map.find q refs); inversion H2; auto.
-Qed.
-*)
 
 
 

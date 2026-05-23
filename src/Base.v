@@ -4,6 +4,7 @@ From Stdlib Require FSets.FMapList FSets.FSetList
                             OrderedType OrderedTypeEx.
 From QuantumLib Require Import Matrix Pad Quantum.
 From Stdlib Require Import String Morphisms (* for Proper *).
+Require Import Setoid. (* for setoid_replace with *)
 
 From Stdlib Require Lists.List.
 Export List.ListNotations.
@@ -144,21 +145,6 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       destruct (M.find z m1); auto.
   Qed.
 
-  (*
-  Lemma domain_add_iff : forall A x z (a : A) m0 m,
-    Add x a m0 m ->
-    FSet.In z (domain m) <-> (x = z) \/ FSet.In z (domain m0).
-  Proof.
-    intros ? ? ? ? ? ? Hadd.
-    unfold Add in Hadd.
-    split; [intros Hin | intros [Heq | Hin]].
-    * destruct (E.eq_dec x z) as [Heq | Heq].
-    Search E.eq @eq.
-    
-    destruct ompare x z. auto.
-  Admitted.
-  *)
-
   (** Domain *)
   #[local] Instance domainProper : forall A,
     Proper (@M.Equal A ==> @FSet.Equal) (@domain A).
@@ -191,7 +177,6 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
   #[local] Hint Rewrite Add_add : qoreo_db.
 
 
-Require Import Setoid.
   Lemma domain_add' :  forall A x (a : A) m,
     FSet.Equal (domain (M.add x a m))
                (FSet.add x (domain (M.remove x m))).
@@ -311,7 +296,7 @@ Require Import Setoid.
     intros z.
     repeat rewrite FSetProperties.add_iff.
     rewrite FSetProperties.remove_iff.
-    compare x z; intuition.
+    compare x z; auto with *; intuition.
   Qed.
   
   Lemma domain_In : forall A x (m : t A),
@@ -320,7 +305,6 @@ Require Import Setoid.
     intros A x m.
     induction m using map_induction.
     * rewrite domain_Empty; auto.
-      Search FSet.In FSet.empty.
       rewrite FSetProperties.empty_iff.
       split; [inversion 1 | intros [a Hmaps]].
       apply H in Hmaps.
@@ -508,7 +492,6 @@ Require Import Setoid.
     intros Hempty.
     unfold Empty in Hempty.
     apply (Hempty x a).
-    Search MapsTo add.
     apply add_1. reflexivity.
   Qed.
 
@@ -552,9 +535,32 @@ Require Import Setoid.
   *)
   Lemma singleton_add_inversion : forall A x (a : A) y b m,
     Singleton x a (M.add y b m) ->
-    x = y /\ a = b /\ M.Empty m.
+    E.eq x y /\ a = b /\ M.Empty (M.remove y m).
   Proof.
-  Admitted.
+    intros ? ? ? ? ? ? Hsing.
+    unfold Singleton in Hsing.
+    compare x y.
+    2:{
+      specialize (Hsing y). autorewrite with qoreo_db in Hsing.
+      repeat reduce_eq_dec.
+      discriminate.
+    }
+    split; try reflexivity.
+    split.
+    { (* a = b *)
+      specialize (Hsing x).
+      autorewrite with qoreo_db in Hsing.
+      repeat reduce_eq_dec.
+      inversion Hsing; auto.
+    }
+    (* Empty *)
+    intros z c.
+    specialize (Hsing z).
+    intros Hmapsto; apply F.find_mapsto_iff in Hmapsto.
+    autorewrite with qoreo_db in *.
+    reduce_eq_dec; [discriminate | ].
+    rewrite Hsing in Hmapsto; discriminate.
+  Qed.
 
   Ltac subst_eq_hypothesis_fwd m :=
     repeat match goal with
@@ -687,7 +693,6 @@ Require Import Setoid.
     intros.
     unfold Disjoint in *.
     intros z.
-    Search In remove.
     rewrite F.remove_in_iff.
     intros [[Hneq Hin1] Hin2].
     apply (H z); auto.
@@ -967,12 +972,42 @@ Require Import Setoid.
   Qed.
 
   (* Only true in both directions if f is injective *)
-  Lemma partition_map_iff : forall A B (f : A -> B) m m1 m2,
-    Partition m m1 m2 <->
+  Lemma partition_map : forall A B (f : A -> B) m m1 m2,
+    Partition m m1 m2 ->
     Partition (M.map f m) (M.map f m1) (M.map f m2).
   Proof.
-  Admitted.
+    intros ? ? ? ? ? ? Hpart.
+    reflect_partition.
+    + apply disjoint_map; auto.
+    + intros z. autorewrite with qoreo_db.
+      destruct (find z m1) as [a | ] eqn:Hfind1;
+        simpl; auto. 
+  Qed.
 
+  Lemma map_partition : forall A B (f : A -> B) m m1 m2,
+    (forall x y, f x = f y -> x = y) ->
+    Partition (M.map f m) (M.map f m1) (M.map f m2) ->
+    Partition m m1 m2.
+  Proof.
+      intros ? ? ? ? ? ? Hinj Hpart.
+      reflect_partition; apply disjoint_map in Hdisj; auto.
+      intros z.
+      specialize (Heq z).
+      autorewrite with qoreo_db in *.
+      destruct (find z m1) eqn:Hfind1.
+      {
+        destruct (find z m); simpl in Heq;
+          inversion Heq; auto.
+        apply Hinj in H0; subst; auto.
+      }
+      simpl in Heq.
+      destruct (find z m); destruct (find z m2);
+        auto;
+        inversion Heq.
+      apply Hinj in H0; subst; auto.
+  Qed.
+
+  (*
   Lemma partition_map_inv : forall A B (f : A -> B) m n1 n2,
     Partition (M.map f m) n1 n2 ->
     exists m1 m2,
@@ -983,6 +1018,7 @@ Require Import Setoid.
       Partition m m1 m2.
   Proof.
   Admitted.
+  *)
 
   Lemma partition_empty1_eq : forall A m m0,
       Partition m (M.empty A) m0 ->
@@ -1004,7 +1040,6 @@ Require Import Setoid.
     destruct (find z m0); auto.
   Qed.
 
-  Search remove In.
   #[local] Hint Rewrite F.remove_in_iff : qoreo_db.
   #[local] Hint Rewrite F.remove_mapsto_iff : qoreo_db.
 
@@ -1092,10 +1127,13 @@ Require Import Setoid.
 
       (* Partitions with map *)
       | [ |- Partition (M.map ?f _) (M.map ?f _) (M.map ?f _) ] =>
-        apply partition_map_iff
+        apply partition_map
+      (*
       | [ H : Partition (M.map ?f _) (M.map ?f _) (M.map ?f _) |- _ ] =>
-        apply partition_map_iff in H
+        apply map_partition in H
+      *)
 
+      (*
       | [H : Partition (M.map ?f ?m) ?n1 ?n2 |- _] =>
         let m1 := fresh "m1" in
         let m2 := fresh "m2" in
@@ -1104,6 +1142,7 @@ Require Import Setoid.
         destruct (partition_map_inv _ _ _ _ _ _ H)
           as [m1 [m2 [Heq1 [Heq2 Hpart]]]]; auto;
         subst_map; try rewrite Heq1, Heq2 in *; try clear n1 Heq1 n2 Heq2
+        *)
     end.
 
   Ltac vsimpl :=
