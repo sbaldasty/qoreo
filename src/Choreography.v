@@ -372,7 +372,7 @@ Lemma wt_subst_bang : forall tau G D T A x v C,
     Expr.Val v ->
     Expr.WellTyped (Var.Map.empty _) (Var.Map.empty _) (Var.Map.empty _) v tau ->
     ChorEnv.MapsTo A x tau G ->
-               WellTyped G D T (Choreography.subst A x v C).
+    WellTyped G D T (Choreography.subst A x v C).
 Proof.
   intros tau G D T A x v C HWT HV HWTV HA.
   induction HWT.
