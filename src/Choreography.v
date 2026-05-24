@@ -501,21 +501,34 @@ Lemma wt_subst_lin : forall ThetaA1 ThetaA2 tau G D T A x v C,
 
     WellTyped G D T (Choreography.subst A x v C).
 Proof.
-  intros ThetaA1 ThetaA2 tau G D T A x v C HWTC HV HWTV HA HAP.
+  intros ThetaA1 ThetaA2 tau G D T A x v C HWTCI HV HWTV HA HAP.  
 
-  (* Formulating the induction to not lost critical hypotheses. *)
-  generalize HWTC.
-  intros HWTCI.
+  (* Destructing C first to deal with Nil non-inductively. *)
+  (* destruct C. *)
+
+  (* Formulating the induction to not lose critical hypotheses. *)
+  generalize HWTCI. 
+  intros HWTC.
   dependent induction HWTCI.
 
-  (* Nil case at least requires careful (dependent) induction *)
+  (* Nil requires dependent induction. *)
   - unfold Choreography.subst.
     inversion HWTC; subst.
     apply Nil.
     auto.
     apply (add_empty A ThetaA2 T).
     auto.
-  
+
+  - apply EPR.
+    auto.
+    fold Choreography.subst.
+    destruct (Insn.rebound_in A x (Insn.EPR A0 x0 B y)) eqn:Heq.
+    (* {
+       inversion HWTC.
+       eapply (EPR G D (Actor.Map.add A ThetaA2 T) A0 x0 B y C H) in HWTC.
+       }
+    
+     *)
 Admitted.
 
     
