@@ -1379,7 +1379,8 @@ Module Config.
     |}).
 
   Definition new (b : bool) refs (cfg : t) : Var.t * Var.Map.t nat * t :=
-    let x := Var.fresh refs in
+    (*let x := Var.fresh refs in*)
+    let x := dim cfg in (* don't want x to depend on refs *)
     let q := dim cfg in
     let rho' := kron (qstate cfg) (bool_to_ket b) in
     (x, Var.Map.add x q refs, {|
