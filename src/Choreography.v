@@ -485,50 +485,40 @@ Proof.
 Qed.
 
 (* It would be great to eliminate this Lemma-- in Map tactics? *)
-Lemma add_empty : forall A Theta (T : ChorEnv.t nat),
-    Actor.Map.Empty (Actor.Map.add A Theta T) -> 
-    Actor.Map.Empty T.
+Lemma add_empty_theta : forall A Theta (T : ChorEnv.t nat),
+    ~ Actor.Map.Empty (Actor.Map.add A Theta T).
 Proof.
 Admitted.
 
-Lemma wt_subst_lin : forall ThetaA1 ThetaA2 tau G D T A x v C,
-    WellTyped G D (Actor.Map.add A ThetaA2 T) C ->
+Lemma add_empty_delta : forall A x tau (D : ChorEnv.t Expr.typ),
+    ~ Actor.Map.Empty (ChorEnv.add A x tau D).
+Proof.
+Admitted.
+
+Lemma wt_subst_lin : forall C ThetaA1 ThetaA2 tau G D T A x v,
     Expr.Val v ->
     Expr.WellTyped (Var.Map.empty _) (Var.Map.empty _) ThetaA1 v tau ->
-    
-    ChorEnv.MapsTo A x tau D ->
+    WellTyped G (ChorEnv.add A x tau D) (Actor.Map.add A ThetaA2 T) C ->
     Var.Map.Partition (ChorEnv.find A T) ThetaA1 ThetaA2 ->
-
+    ~ Var.Map.In x (ChorEnv.find A G) ->
+    ~ Var.Map.In x (ChorEnv.find A D) ->
     WellTyped G D T (Choreography.subst A x v C).
 Proof.
-  intros ThetaA1 ThetaA2 tau G D T A x v C HWTCI HV HWTV HA HAP.  
+  intros C. induction C as [| I C IHC ].
 
-  (* Destructing C first to deal with Nil non-inductively. *)
-  (* destruct C. *)
-
-  (* Formulating the induction to not lose critical hypotheses. *)
-  generalize HWTCI. 
-  intros HWTC.
-  dependent induction HWTCI.
-
-  (* Nil requires dependent induction. *)
-  - unfold Choreography.subst.
-    inversion HWTC; subst.
+  - intros ThetaA1 ThetaA2 tau G D T A x v Hval Hv HC HinG HinD HninD.
+    inversion HC. subst. 
     apply Nil.
-    auto.
-    apply (add_empty A ThetaA2 T).
-    auto.
-
-  - apply EPR.
-    auto.
-    fold Choreography.subst.
-    destruct (Insn.rebound_in A x (Insn.EPR A0 x0 B y)) eqn:Heq.
-    (* {
-       inversion HWTC.
-       eapply (EPR G D (Actor.Map.add A ThetaA2 T) A0 x0 B y C H) in HWTC.
-       }
     
-     *)
+    + pose proof (add_empty_delta A x tau D).
+      contradiction.
+
+    + pose proof (add_empty_theta A ThetaA2 T).
+      contradiction.
+      
+  - intros ThetaA1 ThetaA2 tau G D T A x v Hval Hv HC HinG HinD HninD.
+    destruct I.
+
 Admitted.
 
     
