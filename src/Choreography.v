@@ -484,7 +484,7 @@ Proof.
 
 Qed.
 
-(* It would be great to eliminate this Lemma-- in Map tactics? *)
+(* It would be great to eliminate this and next Lemma-- in Map tactics? *)
 Lemma add_empty_theta : forall A Theta (T : ChorEnv.t nat),
     ~ Actor.Map.Empty (Actor.Map.add A Theta T).
 Proof.
@@ -518,6 +518,8 @@ Proof.
       
   - intros ThetaA1 ThetaA2 tau G D T A x v Hval Hv HC HinG HinD HninD.
     destruct I.
+
+    +
 
 Admitted.
 
