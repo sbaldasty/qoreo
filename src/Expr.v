@@ -543,7 +543,6 @@ Hint Rewrite Var.Map.Properties.F.empty_in_iff : var_db.
 Lemma wt_disjoint' : forall Γ Δ Θ e τ,
   WellTyped Γ Δ Θ e τ ->
   forall z, Var.Map.In z Γ -> Var.Map.In z Δ -> False.
-Admitted (*
 Proof.
   intros ? ? ? ? ? HWT.
   induction HWT;
@@ -588,7 +587,7 @@ Proof.
     { apply (IHHWT1 z); auto. }
     { apply (IHHWT2 z); auto. }
 Qed.
-*).
+
 
 Lemma wt_disjoint : forall Γ Δ Θ e τ,
   WellTyped Γ Δ Θ e τ ->
@@ -604,7 +603,6 @@ Lemma weakening1 : forall e Γ Δ Θ τ,
   ~ Var.Map.In x0 Γ ->
   ~ Var.Map.In x0 Δ ->
   WellTyped (Var.Map.add x0 τ0 Γ) Δ Θ e τ.
-Admitted (*
 Proof.
   intros ? ? ? ? ? HWT;
     induction HWT;
@@ -695,7 +693,6 @@ Proof.
     eapply IHHWT;
       Var.simplify.
 Qed.
-*).
   
 
 Lemma weakening_gen : forall Γ0,
@@ -715,7 +712,7 @@ Proof.
     setoid_replace (Var.Map.concat Γ (Var.Map.M.empty _))
       with Γ; auto.
     {
-      intros z. autorewrite with var_db.
+      Var.reflect_find.
       destruct (Var.Map.M.find z Γ); auto.
     }
 
@@ -730,20 +727,10 @@ Proof.
     destruct Hdisj0 as [Hdisj0 Hx0].
     setoid_replace (Var.Map.concat Γ (Var.Map.add x e Γ0_1))
       with (Var.Map.add x e (Var.Map.concat Γ Γ0_1)).
-    2:{
-      intros z. autorewrite with var_db.
-      compare x z.
-      { (* if x=z then z does not occur in Γ *)
-        apply Var.Map.Properties.F.not_find_in_iff in Hx0.
-        rewrite Hx0; auto.
-      }
-      destruct (Var.Map.M.find z Γ) eqn:Hfind; auto.
-    }
+    2:{ Var.fmap_decide. }
     
     apply weakening1; auto.
-    2:{
-      autorewrite with var_db. intuition.
-    }
+    2:{ Var.fmap_decide. }
     eapply IHΓ0_1; eauto.
     {
       reflect_partition; auto; try reflexivity.
@@ -822,19 +809,13 @@ Proof.
     erewrite IHe1; eauto.
     compare y x; auto.
     compare y z; auto.
-    erewrite IHe2; eauto;
-      autorewrite with var_db;
-      intuition.
+    erewrite IHe2; eauto; Var.fmap_decide.
   * compare y x; auto.
-    erewrite IHe; eauto;
-      autorewrite with var_db;
-      intuition.
+    erewrite IHe; eauto; Var.fmap_decide.
   * rename x into f, t1 into x.
     compare y f; auto.
     compare y x; auto.
-    erewrite IHe; eauto;
-      autorewrite with var_db;
-      intuition.
+    erewrite IHe; eauto; Var.fmap_decide.
 Qed.
 (*Hint Resolve subst_not_in : var_db.*)
 
@@ -845,7 +826,6 @@ Lemma wt_subst_bang : forall e τ Γ Δ Θ x v τ',
   WellTyped (Var.Map.empty _) (Var.Map.empty _) (Var.Map.empty _) v τ ->
   WellTyped (Var.Map.add x τ Γ) Δ Θ e τ' ->
   WellTyped Γ Δ Θ (subst x v e) τ'.
-Admitted (*
 Proof.
   intros ? ? ? ? ? ? ? ? (*Hval*) Hv He.
   assert (Hdisj : Var.Map.Properties.Disjoint (Var.Map.add x τ Γ) Δ).
@@ -887,9 +867,7 @@ Proof.
   * (* LetIn *)
     eapply (WTLetIn Δ1 Δ2 Θ1 Θ2); eauto;
       try Var.Map.Tactics.partition_concat.
-    compare x y.
-    { (* x = y *)  compare x x; auto. }
-    compare y x.
+    repeat reduce_eq_dec; auto.
     eapply IHe2; eauto;
       [ | Var.simplify ].
     {
@@ -967,7 +945,6 @@ Proof.
     rewrite (Var.Map.MProofs.Proofs.add_neq_sym _ x f); auto.
     rewrite (Var.Map.MProofs.Proofs.add_neq_sym _ x y); auto.
 Qed.
-*).
 
 
 
@@ -980,7 +957,6 @@ Lemma wt_subst : forall e Θ1 Θ2 τ Γ Δ Θ x v τ',
   ~ Var.Map.In x Δ ->
 
   WellTyped Γ Δ Θ (subst x v e) τ'.
-Admitted (*
 Proof.
   intros e; induction e;
     intros ? ? ? ? ? ? ? ? ? (*Hval*) Hv He Hpart HΓ Hin;
@@ -1295,7 +1271,6 @@ Proof.
         by decide_equal; auto.
     
 Qed.
-*).
 
 Lemma wt_subst2 : forall Θ1 Θ2 Θ0 Θ τ1 τ2 Γ Δ Θ' x1 v1 x2 v2 e τ',
   WellTyped (Var.Map.empty _) (Var.Map.empty _) Θ1 v1 τ1 ->
@@ -1327,31 +1302,6 @@ Proof.
   { auto with extra_var_db. }
 Qed.
 
-Ltac reflect_find :=
-    repeat match goal with
-    | [ |- Var.Map.In _ _ ] =>
-      apply Var.Map.Properties.F.in_find_iff
-    | [ |- ~ (Var.Map.In _ _) ] =>
-      apply Var.Map.Properties.F.not_find_in_iff
-    | [ |- Var.Map.MapsTo _ _ _ ] =>
-      apply Var.Map.Properties.F.find_mapsto_iff
-    | [ H : Var.Map.In ?x ?m |- _ ] =>
-      let v := fresh "v" in
-      destruct H as [v H];
-      fold (Var.Map.MapsTo x v m) in H
-    | [ H : Var.Map.MapsTo _ _ _ |- _ ] =>
-      apply Var.Map.Properties.F.find_mapsto_iff in H;
-      try rewrite H in *
-    | [ H : ~ Var.Map.In ?x (Var.Map.concat ?m1 ?m2) |- _ ] =>
-      rewrite Var.Map.Proofs.concat_in in H
-    | [ H : ~ (_ \/ _) |- _ ] =>
-      apply Decidable.not_or in H;
-      destruct H
-    | [ H : ~ Var.Map.In ?x ?m |- _ ] =>
-      apply Var.Map.Properties.F.not_find_in_iff in H;
-      rewrite H in *
-    end.
-
 Lemma apply_gate_proper : forall g qs refs1 refs2 cfg,
   Forall (fun q => Var.Map.find q refs1 = Var.Map.find q refs2) qs ->
   Config.apply_gate g qs refs1 cfg
@@ -1366,7 +1316,6 @@ Lemma step_weakening_1 : forall Θ1 Θ1' Θ2 e Θ cfg e' Θ' cfg',
   Config.WellScoped Θ2 cfg ->
   Var.Map.Partition Θ' Θ1' Θ2 ->
   step e Θ cfg e' Θ' cfg'.
-Admitted (*
 Proof.
   intros ? ? ? ? ? ? ? ? ?.
   intros Hstep.
@@ -1388,13 +1337,13 @@ Proof.
     + autorewrite with var_db; auto.
     + unfold Config.measure, Config.find.
       autorewrite with var_db.
-      reflect_find; auto.
+      Var.reflect_find; auto.
 
     + assert (~ Var.Map.In x Θ2).
       { intros Hin. apply (Hdisj0 x). auto. }
       intros z. autorewrite with var_db.
       repeat reduce_eq_dec; auto.
-      reflect_find; auto.
+      Var.reflect_find; auto.
 
   * reflect_partition.
     apply UnitaryB1.
@@ -1403,7 +1352,7 @@ Proof.
     apply apply_gate_proper.
     repeat constructor.
     autorewrite with var_db.
-    reflect_find; auto.
+    Var.reflect_find; auto.
 
   * reflect_partition.
     constructor; auto; autorewrite with var_db; auto.
@@ -1411,10 +1360,9 @@ Proof.
     apply apply_gate_proper.
     repeat constructor;
       autorewrite with var_db;
-      reflect_find;
+      Var.reflect_find;
       auto.
 Qed.
-*).
 
 Lemma step_weakening_2 : forall Θ1 Θ2 Θ2' e Θ cfg e' Θ' cfg',
   step e Θ2 cfg e' Θ2' cfg' ->
@@ -1440,7 +1388,6 @@ Lemma step_inversion : forall e refs ρ e' refs' ρ',
     step e refs1 ρ e' refs1' ρ'
     /\
     Var.Map.Partition refs' refs1' refs2.
-Admitted (*
 Proof.
   intros ? ? ? ? ? ? Hstep.
   induction Hstep;
@@ -1668,7 +1615,7 @@ Proof.
       intros z. autorewrite with var_db in *.
       repeat reduce_eq_dec; auto.
       destruct Hdisj.
-      reflect_find; auto.
+      Var.reflect_find; auto.
     }
     econstructor.
     + autorewrite with var_db. auto.
@@ -1719,7 +1666,6 @@ Proof.
       repeat reduce_eq_dec; auto.
 
 Admitted.
-*).
 
 
 Ltac step_weakening_tac :=
@@ -1746,7 +1692,6 @@ Lemma preservation : forall Γ Δ Θ e τ,
   step e Θ ρ e' Θ' ρ' ->
   
   WellTyped Γ Δ Θ' e' τ.
-Admitted (*
 Proof.
   intros ? ? ? ? ? HWT.
   induction HWT; intros ? ? ? ? HΓ HΔ Hstep;
@@ -1975,7 +1920,6 @@ Proof.
       eapply wt_subst_bang; eauto with var_db.
       eapply wt_subst_bang; eauto with var_db.
 Qed.
-*).
 
 Lemma step_WellScoped_disjoint : forall Θ2 e Θ1 cfg e' Θ1' cfg',
   step e Θ1 cfg e' Θ1' cfg' ->

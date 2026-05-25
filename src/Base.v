@@ -380,6 +380,14 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
   Qed.
   #[local] Hint Rewrite remove_add : qoreo_db.
 
+  Lemma remove_swap : forall A x y (m : M.t A),
+    M.Equal (M.remove x (M.remove y m))
+            (M.remove y (M.remove x m)).
+  Proof.
+    intros A x y m z.
+    autorewrite with qoreo_db.
+    repeat reduce_eq_dec; auto.
+  Qed.
 
   Lemma add_remove_eq : forall A x (a : A) m,
     M.Equal (M.add x a (M.remove x m))
@@ -707,6 +715,26 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
     apply disjoint_sym. auto.
   Qed.
 
+  Lemma disjoint_in_l : forall {A} (m1 m2 : M.t A) x,
+    Disjoint m1 m2 ->
+    M.In x m1 ->
+    ~ M.In x m2.
+  Proof.
+    intros A m1 m2 x Hdisj Hin1 Hin2.
+    apply (Hdisj x); auto.
+  Qed.
+  #[local] Hint Resolve disjoint_in_l : qoreo_db.
+
+  Lemma disjoint_in_r : forall {A} (m1 m2 : M.t A) x,
+    Disjoint m1 m2 ->
+    M.In x m2 ->
+    ~ M.In x m1.
+  Proof.
+    intros A m1 m2 x Hdisj Hin2 Hin1.
+    apply (Hdisj x); auto.
+  Qed.
+  #[local] Hint Resolve disjoint_in_r : qoreo_db.
+
 
   Lemma disjoint_add_1 : forall A m1 m2 x (a : A),
     Disjoint (M.add x a m1) m2 <-> Disjoint m1 m2 /\ ~ M.In x m2.
@@ -844,6 +872,28 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
     exfalso. apply (Hdisj z). split.
     - apply F.in_find_iff. rewrite Hfind1; discriminate.
     - apply F.in_find_iff. rewrite Hfind2; discriminate.
+  Qed.
+
+  Lemma concat_add_l : forall A x (a : A) m1 m2,
+    M.Equal (concat (M.add x a m1) m2)
+            (M.add x a (concat m1 m2)).
+  Proof.
+    intros A x a m1 m2 z.
+    autorewrite with qoreo_db.
+    reduce_eq_dec; auto.
+  Qed.
+  #[local] Hint Rewrite @concat_add_l : qoreo_db.
+
+  Lemma concat_add_r : forall A x (a : A) m1 m2,
+    ~ M.In x m1 ->
+    M.Equal (concat m1 (M.add x a m2))
+            (M.add x a (concat m1 m2)).
+  Proof.
+    intros A x a m1 m2 Hin z.
+    autorewrite with qoreo_db.
+    compare x z.
+    - apply F.not_find_in_iff in Hin. rewrite Hin; auto.
+    - auto.
   Qed.
 
   Ltac reflect_partition :=
@@ -1095,6 +1145,42 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       repeat reduce_eq_dec; auto with var_db
     end; fail.
 
+  (* reflect_find db: normalizes In/MapsTo hypotheses to find-based form,
+     then reduces the goal using autorewrite with db in * + reduce_eq_dec.
+     fmap_decide_with db: calls reflect_find then closes with tauto/auto. *)
+  Ltac reflect_find_body :=
+    match goal with
+    | [ H : M.In ?x ?m |- _ ] =>
+      let v := fresh "v" in
+      destruct H as [v H]; fold (M.MapsTo x v m) in H
+    | [ H : M.MapsTo _ _ _ |- _ ] =>
+      apply F.find_mapsto_iff in H; try rewrite H in *
+    | [ H : ~ M.In ?x (concat ?m1 ?m2) |- _ ] =>
+      rewrite concat_in in H
+    | [ H : ~ (?P \/ ?Q) |- _ ] =>
+      let Hl := fresh in let Hr := fresh in
+      assert (Hl : ~P) by tauto;
+      assert (Hr : ~Q) by tauto;
+      clear H
+    | [ H : ~ M.In ?x ?m |- _ ] =>
+      apply F.not_find_in_iff in H; rewrite H in *
+    | [ |- M.Equal _ _ ] => intro z
+    | [ |- Disjoint _ _ ] => intro z
+    | [ |- M.In _ _ ] => apply F.in_find_iff
+    | [ |- ~ M.In _ _ ] => apply F.not_find_in_iff
+    | [ |- M.MapsTo _ _ _ ] => apply F.find_mapsto_iff
+    end.
+
+  (* instantiate this for each relevant hint database *)
+  Ltac reflect_find :=
+    repeat (
+      reflect_find_body;
+      autorewrite with qoreo_db in *;
+      repeat reduce_eq_dec
+    ).
+  Ltac decide_with := 
+    reflect_find; first [tauto | auto].
+
   Ltac reduce_partition :=
     match goal with
 
@@ -1228,6 +1314,7 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
     Ltac vsimpl := Proofs.vsimpl.
     Ltac partition_concat := Proofs.partition_concat.
     Ltac decide_equal := Proofs.decide_equal.
+
   End Tactics.
 
 End FMap_fun.
@@ -1258,6 +1345,15 @@ Module Var.
       Map.Tactics.vsimpl;
       try (intuition; fail).
 
+  (* instantiate this for each relevant hint database *)
+  Ltac reflect_find :=
+    repeat (
+      Map.Proofs.reflect_find_body;
+      autorewrite with var_db in *;
+      repeat Map.Tactics.reduce_eq_dec
+    ).
+  Ltac fmap_decide := 
+    reflect_find; first [tauto | auto].
 
   (* Global var_db hints: instantiations of FMap_fun's local qoreo_db hints for Var.Map *)
   #[global] Hint Rewrite Map.Properties.F.add_mapsto_iff : var_db.
@@ -1279,6 +1375,7 @@ Module Var.
 
   #[global] Hint Rewrite Map.Proofs.concat_find : var_db.
   #[global] Hint Rewrite Map.Proofs.concat_in : var_db.
+  #[global] Hint Rewrite @Map.Proofs.concat_add_l : var_db.
   #[global] Hint Rewrite @Map.Proofs.map_concat : var_db.
   #[global] Hint Rewrite Map.Proofs.fset_in_union : var_db.
   #[global] Hint Rewrite Map.Proofs.remove_map : var_db.
@@ -1298,6 +1395,7 @@ Module Var.
   #[global] Hint Resolve @Map.Proofs.singleton_remove : var_db.
   #[global] Hint Resolve Map.Proofs.add_mapsto : extra_var_db.
   #[global] Hint Resolve Map.Proofs.disjoint_empty_1 Map.Proofs.disjoint_empty_2 : var_db.
+  #[global] Hint Resolve Map.Proofs.disjoint_in_l Map.Proofs.disjoint_in_r : var_db.
   #[global] Hint Resolve Map.Proofs.partition_empty_l : var_db.
   #[global] Hint Resolve Map.Proofs.partition_empty_r : var_db.
   #[global] Hint Resolve Map.M.remove_1 : var_db.
@@ -1521,6 +1619,16 @@ Module Actor.
     Map.Tactics.vsimpl;
     try (intuition; fail).
 
+  (* instantiate this for each relevant hint database *)
+  Ltac reflect_find :=
+    repeat (
+      Map.Proofs.reflect_find_body;
+      autorewrite with actor_db in *;
+      repeat Map.Tactics.reduce_eq_dec
+    ).
+  Ltac fmap_decide := 
+    reflect_find; first [tauto | auto].
+
 (*  #[global] Existing Instance MapProofs.F.EqualSetoid.*)
   
   (* Global actor_db hints: instantiations of FMap_fun's local qoreo_db hints for Actor.Map *)
@@ -1545,6 +1653,7 @@ Module Actor.
 
   #[global] Hint Rewrite Map.Proofs.concat_find : actor_db.
   #[global] Hint Rewrite Map.Proofs.concat_in : actor_db.
+  #[global] Hint Rewrite @Map.Proofs.concat_add_l : actor_db.
   #[global] Hint Rewrite @Map.Proofs.map_concat : actor_db.
   #[global] Hint Rewrite Map.Proofs.fset_in_union : actor_db.
   #[global] Hint Rewrite Map.Proofs.remove_map : actor_db.
@@ -1561,6 +1670,7 @@ Module Actor.
 
   #[global] Hint Resolve Map.Proofs.add_mapsto : actor_db.
   #[global] Hint Resolve Map.Proofs.disjoint_empty_1 Map.Proofs.disjoint_empty_2 : actor_db.
+  #[global] Hint Resolve Map.Proofs.disjoint_in_l Map.Proofs.disjoint_in_r : actor_db.
   #[global] Hint Resolve Map.Proofs.partition_empty_l : actor_db.
   #[global] Hint Resolve Map.Proofs.partition_empty_r : actor_db.
   #[global] Hint Resolve Map.M.remove_1 : actor_db.
