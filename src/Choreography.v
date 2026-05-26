@@ -484,14 +484,16 @@ Proof.
 
 Qed.
 
-(* It would be great to eliminate this and next Lemma-- in Map tactics? *)
-Lemma add_empty_theta : forall A Theta (T : ChorEnv.t nat),
-    ~ Actor.Map.Empty (Actor.Map.add A Theta T).
+(* It would be great to eliminate this Lemma-- in Map tactics? *)
+Lemma add_empty_delta : forall A x tau (D : ChorEnv.t Expr.typ),
+    ~ Actor.Map.Empty (ChorEnv.add A x tau D).
 Proof.
 Admitted.
 
-Lemma add_empty_delta : forall A x tau (D : ChorEnv.t Expr.typ),
-    ~ Actor.Map.Empty (ChorEnv.add A x tau D).
+Lemma esubst_lin : forall Gamma Delta Theta e tau x v,
+    Expr.WellTyped Gamma Delta Theta e tau -> 
+    ~ Var.Map.In x Gamma -> 
+    (Var.Map.MapsTo x tau Delta) \/ (~(Var.Map.MapsTo x tau Delta) /\ (Expr.subst x v e) = e).
 Proof.
 Admitted.
 
@@ -507,20 +509,23 @@ Proof.
   intros C. induction C as [| I C IHC ].
 
   - intros ThetaA1 ThetaA2 tau G D T A x v Hval Hv HC HinG HinD HninD.
-    inversion HC. subst. 
-    apply Nil.
-    
-    + pose proof (add_empty_delta A x tau D).
-      contradiction.
+    inversion HC; subst.
+    pose proof (add_empty_delta A x tau D).
+    contradiction.
 
-    + pose proof (add_empty_theta A ThetaA2 T).
-      contradiction.
-      
-  - intros ThetaA1 ThetaA2 tau G D T A x v Hval Hv HC HinG HinD HninD.
-    destruct I.
+  - intros ThetaA1 ThetaA2 tau G D T A x v Hval Hv HC HinT HninG HninD.
+    destruct I as [ A' e B' y | | | | ].
 
-    +
-
+    + eapply Send.
+      { inversion HC; subst; auto. }
+      { destruct (Actor.FSet.MF.eq_dec A A') eqn:Heq.
+        inversion HC. subst. 
+        pose proof (esubst_lin (ChorEnv.find A' G) DeltaA1 ThetaA0 e (Expr.BANG tau0) x v H8 HninG) as HESL.
+        destruct HESL as [HESLL | HESLR].
+        { rewrite <- (add_MapsTo (Expr.typ) x tau DeltaA1) in H8.
+          pose proof
+            (Expr.wt_subst e ThetaA1 ThetaA0 tau (ChorEnv.find A' G) DeltaA1 ThetaA3 x v (Expr.BANG tau0)
+               Hval Hv H8) as HWTS.
 Admitted.
 
     
