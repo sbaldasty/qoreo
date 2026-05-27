@@ -524,22 +524,34 @@ Lemma wt_subst_lin : forall C ThetaA1 ThetaA2 tau G D T A x v,
 Proof.
   intros C. induction C as [| I C IHC ].
 
+  (* Case C = Nil is not possible. *)
   - intros ThetaA1 ThetaA2 tau G D T A x v Hval Hv HC HinG HinD HninD.
     inversion HC; subst.
     pose proof (add_empty_delta A x tau D).
     contradiction.
-
+    
+  (* Case C = I::C' *) 
   - intros ThetaA1 ThetaA2 tau G D T A x v Hval Hv HC HinT HninG HninD.
     destruct I as [ A' e B' y | | | | ].
 
-    + eapply Send.
-      { inversion HC; subst; auto. }
-      { destruct (Actor.FSet.MF.eq_dec A A') eqn:Heq. subst.
-        { inversion HC. subst.
-          pose proof
-            (esubst_lin (ChorEnv.find A' G) DeltaA1 e x v tau
-               (ex_intro _ ThetaA0 (ex_intro _ (Expr.BANG tau0) H8)) HninG) as HESL.
-          destruct HESL as [HxinDA | HxninDA].          
+    (* Case Send. *)
+    + inversion HC. subst.
+
+      assert (A = A' \/ A <> A') as HCasesAeqA'.
+      tauto.
+
+      destruct HCasesAeqA' as [HCasesAeqA'L | HCasesAeqA'R].
+      {
+        assert (HSendety : (exists Theta tau', Expr.WellTyped (ChorEnv.find A' G) DeltaA1 Theta e tau')).
+        exists ThetaA0.
+        exists (Expr.BANG tau0).
+        auto.
+
+        rewrite -> HCasesAeqA'L in HninG.
+        
+        pose proof
+          (esubst_lin (ChorEnv.find A' G) DeltaA1 e x v tau HSendety HninG) as HESL.
+        destruct HESL as [HxinDA | HxninDA].          
           {
             destruct HxinDA as [DeltaA1'].
             destruct H as [HinDA HninDA'].
@@ -548,11 +560,25 @@ Proof.
               (Expr.wt_subst e ThetaA1 ThetaA0 tau (ChorEnv.find A' G) DeltaA1'
                  (Var.Map.concat ThetaA1 ThetaA0) x v (Expr.BANG tau0)
                  Hval Hv H8) as HWTS.
-            pose proof
-              (partitioning (ChorEnv.find A' T) ThetaA0 ThetaA1 ThetaA2 ThetaA3 HinT) as HPartition.
             pose proof (find_add A' ThetaA2 T) as HFA.
+            rewrite -> HCasesAeqA'L in H11.
+            rewrite -> HCasesAeqA'L in HinT.
             rewrite -> HFA in H11.
-            specialize (HWTS (HPartition H11) HninG HninDA').
+            pose proof
+              (partitioning (ChorEnv.find A' T) ThetaA0 ThetaA1 ThetaA2 ThetaA3 HinT H11)
+              as HPartition.
+            specialize (HWTS HPartition HninG HninDA').
+
+            - eapply Send.
+
+              + auto.
+
+              + destruct (Actor.FSet.MF.eq_dec A A') eqn:Heq.
+                { eauto. }
+                { contradiction. }
+                
+              + fold Choreography.subst.
+
 Admitted.
 
     
