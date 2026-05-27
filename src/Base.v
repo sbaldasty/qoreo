@@ -613,13 +613,50 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       end
     end.
 
-  Lemma Empty_remove : forall A x (m : M.t A),
-    M.Empty (M.remove x m) -> M.Empty m.
-  Admitted.
-
   Lemma Empty_concat : forall A (m1 m2 : M.t A),
     M.Empty (concat m1 m2) <-> M.Empty m1 /\ M.Empty m2.
-  Admitted.
+  Proof.
+    intros A m1 m2.
+    split; intros Hempty.
+    * apply empty_map_equal in Hempty.
+      split; intros z a HMapsTo;
+      apply F.find_mapsto_iff in HMapsTo. 
+      + specialize (Hempty z);
+        autorewrite with qoreo_db in *;
+        rewrite HMapsTo in Hempty.
+        discriminate.
+      + specialize (Hempty z).
+        autorewrite with qoreo_db in *.
+        rewrite HMapsTo in Hempty.
+        destruct (find z m1); discriminate.
+    * destruct Hempty as [H1 H2];
+      apply empty_map_equal in H1;
+      apply empty_map_equal in H2.
+      intros z a HMapsTo.
+      apply F.find_mapsto_iff in HMapsTo.
+      specialize (H1 z).
+      specialize (H2 z).
+      autorewrite with qoreo_db in *.
+      rewrite H1 in *.
+      rewrite H2 in *.
+      discriminate. 
+  Qed.
+
+
+  Lemma Empty_find : forall A (m : t A),
+    M.Empty m <-> forall z, M.find z m = None.
+  Proof.
+    intros A m. unfold Empty.
+    split; intros Hin.
+    * intros z.
+      apply F.not_find_in_iff.
+      intros [a Ha].
+      apply Hin in Ha; auto.
+    * intros z a Hmaps.
+      specialize (Hin z).
+      apply F.not_find_in_iff in Hin.
+      apply Hin. exists a; auto.
+  Qed.
 
   Ltac simpl_Empty :=
       match goal with
@@ -629,8 +666,8 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
         apply empty_map_Empty in H
       | [ |- M.Empty (M.map _ _) ] =>
         apply empty_map_Empty
-      | [ H : M.Empty (M.remove _ _) |- _ ] =>
-        apply Empty_remove in H
+(*      | [ H : M.Empty (M.remove _ _) |- _ ] =>
+        apply Empty_remove in H *)
       | [ |- Empty (empty _) ] => apply M.empty_1
       | [ H : M.Empty (concat _ _) |- _ ] =>
         rewrite <- Empty_concat in H; destruct H
@@ -647,7 +684,44 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
   Lemma Singleton_concat : forall A x (a : A) m1 m2,
     Singleton x a (concat m1 m2) ->
     Singleton x a m1 \/ (Empty m1 /\ Singleton x a m2).
-  Admitted.
+  Proof.
+    intros ? ? ? ? ? Hsing.
+    destruct (find x m1) as [a' | ] eqn:Hfind.
+    * (* if x occurs in m1 *)
+      left.
+      unfold Singleton in *.
+      intros z.
+      specialize (Hsing z).
+      autorewrite with qoreo_db in *.
+      compare x z.
+      + rewrite Heq in *.
+        rewrite Hfind in Hsing.
+        inversion Hsing; subst; auto.
+      + destruct (find z m1); auto; discriminate.
+    * (* x not in m1 *)
+      right.
+      split.
+      + intros z b Hmapsto.
+        apply F.find_mapsto_iff in Hmapsto.
+        specialize (Hsing z).
+        autorewrite with qoreo_db in *.
+        rewrite Hmapsto in Hsing.
+        compare x z; inversion Hsing; subst; clear Hsing.
+        rewrite Hfind in *; discriminate.
+      + intros z.
+        compare x z.
+        - (* x = z *) 
+          specialize (Hsing x).
+          autorewrite with qoreo_db in *.
+          rewrite Hfind in Hsing; auto.
+        - (* x <> z *)
+          autorewrite with qoreo_db in *.
+          compare x z.
+          specialize (Hsing z).
+          autorewrite with qoreo_db in Hsing.
+          reduce_eq_dec.
+          destruct (find z m1); try discriminate; auto.
+  Qed.
 
   Lemma Singleton_map : forall A B x (b : B) (f : A -> B) m,
     Singleton x b (map f m) <->
@@ -1353,13 +1427,19 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
     | [ H : ~ M.In ?x ?m |- _ ] =>
       apply F.not_find_in_iff in H;
       try rewrite H in *
+    | [ H : Disjoint _ |- _ ] => unfold Disjoint in H
+    | [ H : M.Empty _ |- _ ] => apply Empty_find in H
 
-    | [ |- M.Equal _ _ ] => intro z
-    | [ |- Disjoint _ _ ] => intro z
+
+    | [ |- M.Equal _ _ ] => let z := fresh "z" in intro z
+    | [ |- Disjoint _ _ ] => let z := fresh "z" in intro z
     | [ |- M.In _ _ ] => apply F.in_find_iff
     | [ |- ~ M.In _ _ ] => apply F.not_find_in_iff
     | [ |- M.MapsTo _ _ _ ] => apply F.find_mapsto_iff
-
+    | [ |- M.Empty _ ] =>
+      let z := fresh "z" in 
+      apply Empty_find; intros z
+    
     | [ H : M.find ?x ?m = _ |- context[M.find ?x ?m] ] => rewrite H
     end.
 
@@ -1726,13 +1806,18 @@ Module Config.
   #[global] Hint Rewrite WellScoped_concat : var_db.
 
   Lemma WellScoped_empty : forall cfg,
-    WellScoped (Var.Map.empty nat) cfg <-> True.
-  Admitted.
-  #[global] Hint Rewrite WellScoped_empty : var_db.
+    WF_Matrix (qstate cfg) ->
+    WellScoped (Var.Map.empty nat) cfg.
+  Proof.
+    intros cfg HWF.
+    split; auto.
+    intros z Hin.
+    autorewrite with var_db in *.
+    contradiction.
+  Qed.
 
 
   (* The operations on configurations form Proper relations *)
-
   Global Instance freshProper : forall A, 
       Proper (@Var.Map.Equal A ==> eq) Var.fresh.
   Proof.

@@ -940,7 +940,15 @@ Proof.
   * (* Var *)
     inversion He; subst; clear He;
       Var.simplify.
-    apply weakening; auto. Var.simplify.
+    assert (Var.Map.Empty Δ).
+    {
+      Var.reflect_find.
+      specialize (H2 z).
+      Var.simplify.
+    }
+    Var.simplify.
+    apply weakening; auto.
+    Var.simplify.
 
   * (* LetIn *) rename t0 into y.
     inversion He; subst; clear He.
@@ -1526,7 +1534,8 @@ Proof.
     eapply step_weakening_1.
     { apply NewC. eauto. }
     + apply Var.Map.Proofs.partition_empty_r.
-    + Var.simplify.
+    + apply Config.WellScoped_empty.
+      destruct HWS; auto.
     + apply Var.Map.Proofs.partition_empty_r.
 
   * (* NewB *)
@@ -1553,7 +1562,8 @@ Proof.
     eapply step_weakening_1.
     { apply MeasC. eauto. }
     + apply Var.Map.Proofs.partition_empty_r.
-    + Var.simplify.
+    + apply Config.WellScoped_empty.
+      eapply Config.wf_qstate; eauto.
     + apply Var.Map.Proofs.partition_empty_r.
 
   * (* MeasB *)
@@ -1871,7 +1881,27 @@ Lemma step_WellScoped_disjoint : forall Θ2 e Θ1 cfg e' Θ1' cfg',
   Var.Map.Properties.Disjoint Θ1 Θ2 ->
   Config.WellScoped Θ2 cfg ->
   Var.Map.Properties.Disjoint Θ1' Θ2.
-Admitted.
+Proof.
+  intros ? ? ? ? ? ? ? Hstep.
+  revert Θ2.
+  induction Hstep; intros Θ2 Hdisj Hws; auto;
+  Var.simplify.
+  * (* new *)
+    unfold Config.new in H.
+    inversion H; subst; clear H.
+    Var.simplify.
+    split; auto.
+    { (* dim cfg ∉ Θ2 *)
+      destruct Hws as [_ Hws].
+      intros Hin.
+      apply Hws in Hin.
+      lia.
+    }
+  * (* measure *)
+    unfold Config.measure in H0.
+    inversion H0; subst; clear H0.
+    apply Var.Map.Proofs.disjoint_remove_1; auto.
+Qed.
 
 Ltac ws_partition_tac :=
   match goal with
