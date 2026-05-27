@@ -290,24 +290,6 @@ Inductive step : Expr.t -> Var.Map.t nat -> Config.t -> Expr.t -> Var.Map.t nat 
        (Pair (QRef q1) (QRef q2)) refs' cfg'
 .
 
-Global Instance config_find_Proper : Proper (eq ==> Var.Map.Equal ==> eq) Config.find.
-Proof.
-  intros x' x Hx refs1 refs2 Hrefs; subst.
-  unfold Config.find. rewrite Hrefs; auto.
-Qed.
-
-Global Instance config_apply_gate_proper :
-  Proper (eq ==> eq ==> Var.Map.Equal ==> eq ==> eq) Config.apply_gate.
-Proof.
-  intros g' g Hg ls' ls Hls refs1 refs2 Hrefs cfg1 cfg2 Hcfg;
-    subst.
-  unfold Config.apply_gate.
-  f_equal. f_equal.
-  apply Proper_map; auto.
-  intros x. rewrite Hrefs; auto.
-Qed.
-
-
 Lemma step_proper : forall e refs cfg e' refs' cfg',
   step e refs cfg e' refs' cfg' ->
   forall refs0 refs0',
@@ -595,8 +577,6 @@ Fixpoint vars (e : t) : Var.FSet.t :=
 (***************)
 (* Type safety *)
 (***************)
-Hint Rewrite Var.Map.Properties.F.empty_in_iff : var_db.
-
 
 Lemma wt_disjoint' : forall Γ Δ Θ e τ,
   WellTyped Γ Δ Θ e τ ->
@@ -761,7 +741,7 @@ Proof.
   intros Γ Δ Θ e τ HWT.
   eapply weakening_gen; eauto with var_db.
 Qed.
-
+#[global] Hint Resolve weakening : var_db.
 
 Lemma subst_not_in : forall e x v Γ Δ Θ τ,
   WellTyped Γ Δ Θ e τ ->
@@ -812,9 +792,6 @@ Proof.
     erewrite IHe1; eauto; Var.simplify.
     erewrite IHe2; eauto; Var.simplify.
 Qed.
-(*Hint Resolve subst_not_in : var_db.*)
-
-#[global] Hint Resolve weakening : var_db.
 
 Lemma wt_subst_bang : forall e τ Γ Δ Θ x v τ',
   WellTyped (Var.Map.empty _) (Var.Map.empty _) (Var.Map.empty _) v τ ->
@@ -1364,15 +1341,6 @@ Proof.
   apply Var.Map.Properties.Partition_sym; auto.
   apply Var.Map.Properties.Partition_sym; auto.
 Qed.
-
-
-(* TODO: add to Base *)
-#[global] Hint Rewrite <- Config.WellScoped_concat : var_db.
-
-  Lemma WellScoped_empty : forall cfg,
-    Config.WellScoped (Var.Map.empty nat) cfg <-> True.
-Admitted.
-#[global] Hint Rewrite WellScoped_empty : var_db.
 
 Lemma step_inversion : forall e refs ρ e' refs' ρ',
   

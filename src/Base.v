@@ -1497,6 +1497,8 @@ Module Var.
   #[global] Hint Rewrite Map.Properties.F.empty_o : var_db.
   #[global] Hint Rewrite Map.Properties.F.map_in_iff : var_db.
   #[global] Hint Rewrite Map.Properties.F.remove_mapsto_iff : var_db.
+  #[global] Hint Rewrite Map.Properties.F.empty_in_iff : var_db.
+
   #[global] Hint Rewrite Map.Properties.F.remove_in_iff : var_db.
   #[global] Hint Rewrite Map.Proofs.disjoint_add_1 : var_db.
   #[global] Hint Rewrite Map.Proofs.disjoint_add_2 : var_db.
@@ -1577,17 +1579,6 @@ Module Config.
               *)
     wf_qrefs : forall x, Var.Map.In x refs -> (x < dim cfg)%nat
   }.
-
-
-  Global Instance WellScopedProper : Proper (Var.Map.Equal ==> eq ==> iff) Config.WellScoped.
-  Proof.
-    intros refs1 refs2 Hrefs cfg1 cfg2 Hcfg; subst.
-    split; intros [wf_qstate wf_qrefs].
-    + split; auto;
-      intros x; setoid_rewrite <- Hrefs; auto.
-    + split; auto;
-      intros x; setoid_rewrite Hrefs; auto.
-  Qed.
 
   
     Definition find (x : Var.t) refs : nat :=
@@ -1703,25 +1694,143 @@ Module Config.
   Qed.
   *)
 
+  (* Properties of well-scopedness*)
+
+  Global Instance WellScopedProper : Proper (Var.Map.Equal ==> eq ==> iff) Config.WellScoped.
+  Proof.
+    intros refs1 refs2 Hrefs cfg1 cfg2 Hcfg; subst.
+    split; intros [wf_qstate wf_qrefs].
+    + split; auto;
+      intros x; setoid_rewrite <- Hrefs; auto.
+    + split; auto;
+      intros x; setoid_rewrite Hrefs; auto.
+  Qed.
 
   Lemma WellScoped_concat : forall Θ1 Θ2 cfg,
-    Config.WellScoped Θ1 cfg /\ Config.WellScoped Θ2 cfg
+    WellScoped (Var.Map.concat Θ1 Θ2) cfg 
     <->
-    Config.WellScoped (Var.Map.concat Θ1 Θ2) cfg.
+    WellScoped Θ1 cfg /\ Config.WellScoped Θ2 cfg.
   Proof.
     intros ? ? ?.
     split.
+    + intros [wf ws].
+      split; split; auto;
+      intros x Hin; apply ws;
+      autorewrite with var_db; auto.
     + intros [[wf ws1] [_ ws2]].
       split; auto.
       intros x Hin. autorewrite with var_db in Hin.
       destruct Hin as [Hin | Hin];
         [apply ws1 | apply ws2]; auto.
-    + intros [wf ws].
-      split; split; auto;
-      intros x Hin; apply ws;
-      autorewrite with var_db; auto.
   Qed.
-  Hint Rewrite WellScoped_concat : var_db.
+  #[global] Hint Rewrite WellScoped_concat : var_db.
+
+  Lemma WellScoped_empty : forall cfg,
+    WellScoped (Var.Map.empty nat) cfg <-> True.
+  Admitted.
+  #[global] Hint Rewrite WellScoped_empty : var_db.
+
+
+  (* The operations on configurations form Proper relations *)
+
+  Global Instance freshProper : forall A, 
+      Proper (@Var.Map.Equal A ==> eq) Var.fresh.
+  Proof.
+
+    intros A refs1 refs2 Hrefs.
+    unfold Var.fresh.
+    apply Var.Map.Properties.fold_Equal; auto.
+    + intros ? ? ? ? ? ? ? ? ?; subst; auto.
+    + intros ? ? ? ? ? ?.
+    
+      destruct (k' + 1 <=? k) eqn:H_k'_k;
+      destruct (a <=? k') eqn:Hk';
+      destruct (a <=? k) eqn:Hk;
+      destruct (k+1 <=? k') eqn:H_k_k';
+      auto;
+        try 
+        (try rewrite Nat.leb_le in *;
+        try rewrite Nat.leb_nle in *;
+        lia).
+      * rewrite H_k'_k; auto.
+      * rewrite Hk'; auto.
+      * rewrite H_k'_k; auto.
+      * rewrite H_k'_k; auto. rewrite Hk'; auto.
+      * rewrite Hk'; auto.
+  Qed.   
+
+
+      
+  Global Instance find_Proper : Proper (eq ==> Var.Map.Equal ==> eq) find.
+  Proof.
+    intros x' x Hx refs1 refs2 Hrefs; subst.
+    unfold Config.find. rewrite Hrefs; auto.
+  Qed.
+
+  Lemma measure_Proper : forall b x cfg refs1 refs2 refs1' refs2' cfg1' cfg2',
+    Var.Map.Equal refs1 refs2 ->
+    measure b x refs1 cfg = (refs1', cfg1') ->
+    measure b x refs2 cfg = (refs2', cfg2') ->
+    Var.Map.Equal refs1' refs2' /\ cfg1' = cfg2'.
+  Proof.
+    intros ? ? ? ? ? ? ? ? ?.
+    intros Heq Hmeas1 Hmeas2.
+    inversion Hmeas1; inversion Hmeas2; subst; clear Hmeas1 Hmeas2.
+    split.
+    + rewrite Heq. reflexivity.
+    + unfold find. rewrite Heq. reflexivity.
+  Qed.
+
+  Global Instance measureProper :
+    Proper (eq ==> eq ==> Var.Map.Equal ==> eq ==>
+      RelationPairs.RelProd Var.Map.Equal eq)
+      measure.
+  Proof.
+    intros ? b ? ? x ? refs1 refs2 Hrefs ? cfg ?;
+      subst.
+    
+    eapply (measure_Proper b x cfg) in Hrefs;
+      try reflexivity.
+    destruct Hrefs as [Heq Heq'].
+    split; unfold RelationPairs.RelCompFun;
+      simpl; auto.
+  Qed.
+
+  Global Instance newProper :
+    Proper (eq ==> Var.Map.Equal ==> eq ==>
+      RelationPairs.RelProd (RelationPairs.RelProd eq Var.Map.Equal) eq)
+      new.
+  Proof.
+    intros ? b ? refs1 refs2 Hrefs ? cfg ?; subst.
+    repeat split; unfold RelationPairs.RelCompFun;
+      simpl; auto.
+    rewrite Hrefs; reflexivity.
+  Qed.
+
+  Global Instance eprProper :
+    Proper (Var.Map.Equal ==> eq ==>
+      RelationPairs.RelProd
+      (RelationPairs.RelProd eq Var.Map.Equal)
+      eq)
+      epr.
+  Proof.
+    intros refs1 refs2 Hrefs ? cfg ?; subst;
+    repeat split; unfold RelationPairs.RelCompFun;
+      simpl; auto.
+    * rewrite Hrefs; auto.
+    * rewrite Hrefs. reflexivity.
+  Qed. 
+
+  Global Instance apply_gate_Proper :
+    Proper (eq ==> eq ==> Var.Map.Equal ==> eq ==> eq) apply_gate.
+  Proof.
+    intros g' g Hg ls' ls Hls refs1 refs2 Hrefs cfg1 cfg2 Hcfg;
+      subst.
+    unfold Config.apply_gate.
+    f_equal. f_equal.
+    apply Proper_map; auto.
+    intros x. rewrite Hrefs; auto.
+  Qed.
 
 End Config.
 
@@ -1774,6 +1883,8 @@ Module Actor.
   #[global] Hint Rewrite Map.Properties.F.empty_o : actor_db.
   #[global] Hint Rewrite Map.Properties.F.map_in_iff : actor_db.
   #[global] Hint Rewrite Map.Properties.F.remove_mapsto_iff : actor_db.
+  #[global] Hint Rewrite Map.Properties.F.empty_in_iff : actor_db.
+
   #[global] Hint Resolve Map.empty_1 : actor_db.
   #[global] Hint Resolve Map.Properties.Partition_sym : actor_db.
   #[global] Hint Rewrite Map.Properties.F.remove_in_iff : actor_db.
