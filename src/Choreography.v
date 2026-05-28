@@ -288,6 +288,7 @@ Proof.
   intros G1 G2 HMA1 A x tau1 B y tau2 HMA2. 
 Admitted.
 
+(* TODO: Need a stronger statement for weakening---need G' to still be disjoint from D *)
 Lemma weakening_gen : forall G D T C,
     WellTyped G D T C -> forall G',
       (forall A x tau, ChorEnv.MapsTo A x tau G -> ChorEnv.MapsTo A x tau G') ->
@@ -321,7 +322,7 @@ Proof.
   - intros G' HW. eapply LetBang; eauto.
 
     pose proof (Expr.weakening_gen
-                  (ChorEnv.find A G) DeltaA1 ThetaA1 e (Expr.BANG tau) H (ChorEnv.find A G'))
+                  e (ChorEnv.find A G) DeltaA1 ThetaA1 (Expr.BANG tau) H (ChorEnv.find A G'))
       as HEW.
     apply HEW.
     intros x' tau' HVM.
@@ -337,13 +338,13 @@ Proof.
     auto.
 
   - intros G' HW. eapply LetIn; eauto.
-    pose proof (Expr.weakening_gen (ChorEnv.find A G) DeltaA1 ThetaA1 e tau H (ChorEnv.find A G'))
+    pose proof (Expr.weakening_gen e (ChorEnv.find A G) DeltaA1 ThetaA1  tau H (ChorEnv.find A G'))
       as HEW.
     setoid_rewrite -> extension in HW.
     auto.
 
   - intros G' HW. eapply LetPair; eauto.
-    pose proof (Expr.weakening_gen (ChorEnv.find A G) DeltaA1 ThetaA1 e
+    pose proof (Expr.weakening_gen e (ChorEnv.find A G) DeltaA1 ThetaA1
                   (Expr.Tensor tau1 tau2) H (ChorEnv.find A G'))
       as HEW.
     setoid_rewrite -> extension in HW.
@@ -368,9 +369,9 @@ Require Import Setoid.
 Lemma wt_subst_bang : forall tau G D T A x v C,
     WellTyped G D T C ->
     Expr.Val v ->
-    Expr.WellTyped (Var.Map.empty _) (Var.Map.empty _) (Var.Map.empty _) v (Expr.BANG tau) ->
+    Expr.WellTyped (Var.Map.empty _) (Var.Map.empty _) (Var.Map.empty _) v tau ->
     ChorEnv.MapsTo A x tau G ->
-               WellTyped G D T (Choreography.subst A x v C).
+    WellTyped G D T (Choreography.subst A x v C).
 Proof.
   intros tau G D T A x v C HWT HV HWTV HA.
   induction HWT.
@@ -386,9 +387,7 @@ Proof.
   
   - eapply Send; eauto.
 
-    + (* v must be of the form !e *)
-      inversion HWTV; subst; inversion HV; subst.
-      Var.Map.Tactics.vsimpl.
+    + 
       destruct (Actor.FSet.MF.eq_dec A A0) eqn:Heq; subst; eauto.
       { (* A = A0 *)
         eapply Expr.wt_subst_bang; eauto.
@@ -473,10 +472,8 @@ Proof.
     + Actor.Map.Tactics.compare A A0; eauto.
     
       {
-        pose proof (Expr.wt_subst_bang tau (ChorEnv.find A G) DeltaA1 ThetaA1 x v e (Expr.Tensor tau1 tau2)) as HEWTS.
-          eapply HEWTS.
-        { auto. }
-        { apply Expr.weakening; auto. }
+        pose proof (Expr.wt_subst_bang e tau (ChorEnv.find A G) DeltaA1 ThetaA1 x v (Expr.Tensor tau1 tau2)) as HEWTS.
+          eapply HEWTS; auto.
         { rewrite add_MapsTo; eauto. }
       }
     + fold Choreography.subst.

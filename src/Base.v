@@ -4,6 +4,7 @@ From Stdlib Require FSets.FMapList FSets.FSetList
                             OrderedType OrderedTypeEx.
 From QuantumLib Require Import Matrix Pad Quantum.
 From Stdlib Require Import String Morphisms (* for Proper *).
+Require Import Setoid. (* for setoid_replace with *)
 
 From Stdlib Require Lists.List.
 Export List.ListNotations.
@@ -49,6 +50,26 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
   #[local] Hint Resolve Properties.Partition_sym : qoreo_db.
 
   Module Proofs.
+
+
+  #[local] Existing Instance FSetProperties.Equal_ST.
+  Ltac compare x y :=
+    let Heq := fresh "Heq" in
+    destruct (E.eq_dec x y) as [Heq | Heq];
+      [try (rewrite <- Heq in *; clear y Heq) | ];
+      try contradiction;
+      repeat match goal with
+      | [ H : ~ E.eq ?x ?x |- _ ] => contradict H; reflexivity
+      | [ H : E.eq ?x ?x   |- _ ] => clear H
+      | [ H1 : ~ E.eq ?x ?y, H2 : ~ E.eq ?x ?y |- _ ] => clear H2
+      | [ H1 : ~ E.eq ?x ?y, H2 : ~ E.eq ?y ?x |- _ ] => clear H2
+      end.
+
+  Ltac reduce_eq_dec :=
+    match goal with
+    | [ |- context[E.eq_dec ?x ?y] ] => compare x y
+    | [ H : context[E.eq_dec ?x ?y] |- _ ] => compare x y
+    end.
 
   #[local] Instance singletonProper : forall A,
     Proper (E.eq ==> @eq A ==> @M.Equal A ==> iff) (@Singleton A).
@@ -127,17 +148,7 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       destruct (M.find z m1); auto.
   Qed.
 
-  Lemma domain_add_iff : forall A x z (a : A) m0 m,
-    Add x a m0 m ->
-    FSet.In z (domain m) <-> (x = z) \/ FSet.In z (domain m0).
-  Admitted.
-
-  Lemma domain_remove : forall A x m,
-    FSet.Equal (domain (remove x m)) (FSet.remove x (@domain A m)).
-  Admitted.
-
   (** Domain *)
-  #[local] Existing Instance FSetProperties.Equal_ST.
   #[local] Instance domainProper : forall A,
     Proper (@M.Equal A ==> @FSet.Equal) (@domain A).
   Proof.
@@ -151,7 +162,165 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       repeat rewrite FSetProperties.add_iff.
       tauto.
   Qed.
-      
+
+  Lemma domain_Empty : forall A (m : t A),
+    M.Empty m ->
+    FSet.Equal (domain m) FSet.empty.
+  Proof.
+    intros.
+    unfold domain.
+    apply fold_Empty; auto with qoreo_db.
+    { apply FSetProperties.Equal_ST. }
+  Qed.
+  Lemma Add_add : forall A x (a : A) m m',
+    Add x a m m' <-> Equal m' (M.add x a m).
+  Proof.
+    intros. unfold Add. split; auto.
+  Qed.
+  #[local] Hint Rewrite Add_add : qoreo_db.
+
+
+  Lemma domain_add' :  forall A x (a : A) m,
+    FSet.Equal (domain (M.add x a m))
+               (FSet.add x (domain (M.remove x m))).
+  Proof.
+    intros.
+
+    setoid_replace (add x a m) with (add x a (remove x m)).
+      2:{
+        intros z. autorewrite with qoreo_db.
+        compare x z; auto.
+      }
+    unfold domain.
+      rewrite fold_add.
+      + reflexivity.
+      + apply FSetProperties.Equal_ST.
+      + clear x a m.
+        intros x1 x2 Hx a1 a2 Ha X1 X2 HX.
+        rewrite HX. rewrite Hx.
+        reflexivity.
+      + intros k k' ? ? X Heq.
+        intros z.
+        repeat rewrite FSetProperties.add_iff.
+        intuition.
+      + apply remove_1; auto. reflexivity.
+  Qed.
+  (* #[local] Hint Rewrite domain_add' : qoreo_db.*)
+
+
+
+  Lemma domain_remove : forall A m x,
+    FSet.Equal (domain (remove x m)) (FSet.remove x (@domain A m)).
+  Proof.
+    intros A m x z.
+    rewrite FSetProperties.remove_iff.
+    
+    induction m using map_induction.
+    * rewrite (domain_Empty _ m); auto.
+      rewrite (domain_Empty _ (remove x m)).
+      2:{
+        unfold Empty in *.
+        intros y b Hmaps.
+        apply remove_3 in Hmaps.
+        apply H in Hmaps; contradiction.
+      }
+      split; [intros Hin; split | intros [Hin Heq]];
+        auto.
+      apply FSetProperties.empty_iff in Hin. contradiction.
+
+    * rewrite Add_add in H0.
+      rewrite H0; clear m2 H0.
+      compare x x0.
+      + (* if equal *)
+        setoid_replace (remove x (add x e m1))
+          with (remove x m1).
+        2:{
+          intros w. autorewrite with qoreo_db.
+          compare x w; auto.
+        }
+        rewrite IHm1.
+        destruct IHm1 as [IHm1 IHm2].
+        rewrite domain_add'.
+        rewrite FSetProperties.add_iff.
+        split; intros [Hin Hneq]; split; auto.
+        {
+          destruct Hin as [ | Hin]; try contradiction.
+          apply IHm1 in Hin.
+          destruct Hin as [Hin _ ].
+          auto.
+        }
+
+      + (* if not equal *)
+        setoid_replace (remove x (add x0 e m1))
+          with (add x0 e (remove x m1)).
+        2:{
+          intros w. autorewrite with qoreo_db.
+          compare x w; auto. compare x0 w; auto.
+        }
+        repeat rewrite domain_add'.
+        repeat rewrite FSetProperties.add_iff.
+        setoid_replace (remove x0 (remove x m1))
+          with (remove x (remove x0 m1)).
+        2:{
+          intros w. autorewrite with qoreo_db.
+          compare x0 w; auto.
+          compare x w; auto.
+        }
+        setoid_replace (remove x0 m1)
+          with m1.
+        2:{
+          intros w. autorewrite with qoreo_db.
+          compare x0 w; auto.
+          (* ~ In w m1 *)
+          apply F.not_find_in_iff in H; auto.
+        }
+        rewrite IHm1.
+        split; intros H0.
+        {
+          destruct H0 as [H0 |[Hin Hneq]]; auto.
+          { 
+            rewrite H0 in *; clear x0 H0.
+            split; auto. left; reflexivity.
+          }
+        }
+        {
+          destruct H0 as [H0 Hneq].
+          tauto.
+        }
+  Qed.
+
+  Lemma domain_add :  forall A x (a : A) m,
+    FSet.Equal (domain (M.add x a m))
+               (FSet.add x (domain m)).
+  Proof.
+    intros.
+    rewrite domain_add'.
+    rewrite domain_remove.
+    intros z.
+    repeat rewrite FSetProperties.add_iff.
+    rewrite FSetProperties.remove_iff.
+    compare x z; auto with *; intuition.
+  Qed.
+  
+  Lemma domain_In : forall A x (m : t A),
+    FSet.In x (domain m) <-> M.In x m.
+  Proof.
+    intros A x m.
+    induction m using map_induction.
+    * rewrite domain_Empty; auto.
+      rewrite FSetProperties.empty_iff.
+      split; [inversion 1 | intros [a Hmaps]].
+      apply H in Hmaps.
+      contradiction.
+
+    * rewrite Add_add in H0.
+      rewrite H0; clear m2 H0.
+      rewrite domain_add.
+      rewrite FSetProperties.add_iff.
+      autorewrite with qoreo_db.
+      rewrite IHm1.
+      reflexivity.
+  Qed.
 
 
   (** Lemma about FSets *)
@@ -201,20 +370,6 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
   Qed.
   #[local] Hint Rewrite remove_map : qoreo_db.
 
-  Ltac compare x y :=
-    let Heq := fresh "Heq" in
-    destruct (E.eq_dec x y) as [Heq | Heq];
-      try (rewrite <- Heq in *; clear Heq);
-      try contradiction;
-      try match goal with
-      | [ H : ~ E.eq ?x ?x |- _ ] => contradict H; reflexivity
-      end.
-
-  Ltac reduce_eq_dec :=
-    match goal with
-    | [ |- context[E.eq_dec ?x ?y] ] => compare x y
-    | [ H : context[E.eq_dec ?x ?y] |- _ ] => compare x y
-    end.
 
   Lemma remove_add : forall A x y (v : A) Gamma,
     M.Equal
@@ -227,6 +382,63 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
     repeat (reduce_eq_dec; autorewrite with qoreo_db; auto).
   Qed.
   #[local] Hint Rewrite remove_add : qoreo_db.
+
+  Lemma remove_swap : forall A x y (m : M.t A),
+    M.Equal (M.remove x (M.remove y m))
+            (M.remove y (M.remove x m)).
+  Proof.
+    intros A x y m z.
+    autorewrite with qoreo_db.
+    repeat reduce_eq_dec; auto.
+  Qed.
+
+  Lemma add_remove_eq : forall A x (a : A) m,
+    M.Equal (M.add x a (M.remove x m))
+                  (M.add x a m).
+  Proof.
+    intros.
+    intros z.
+    autorewrite with qoreo_db.
+    compare x z; auto.
+  Qed.
+  #[local] Hint Rewrite add_remove_eq : qoreo_db.
+
+  Lemma add_mapsto : forall A x (a : A) m,
+    M.MapsTo x a m ->
+    M.Equal (M.add x a m)
+                  m.
+  Proof.
+    intros.
+    intros z.
+    autorewrite with qoreo_db.
+    compare x z; auto.
+    apply F.find_mapsto_iff in H; auto.
+  Qed.
+  #[local] Hint Resolve add_mapsto : var_db.
+
+
+  Lemma add_neq_sym : forall A x y (a b : A) m,
+  (*x <> y ->*)
+  ~ E.eq x y ->
+  M.Equal (M.add x a (M.add y b m))
+          (M.add y b (M.add x a m)).
+  Proof.
+    intros.
+    intros z.
+    autorewrite with qoreo_db.
+    repeat reduce_eq_dec; auto.
+  Qed.
+
+  Lemma add_add_eq : forall A x (a b : A) m,
+    M.Equal 
+      (M.add x a (M.add x b m))
+      (M.add x a m).
+  Proof.
+    intros.
+    intros z.
+    autorewrite with qoreo_db.
+    repeat reduce_eq_dec; auto.
+  Qed.
 
   Lemma remove_empty : forall A x,
     M.Equal (M.remove x (@M.empty A))
@@ -284,6 +496,16 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
   Qed.
   #[local] Hint Rewrite @empty_map_empty : qoreo_db.
 
+  Lemma add_not_Empty : forall A x (a : A) m,
+    ~ M.Empty (M.add x a m).
+  Proof.
+    intros.
+    intros Hempty.
+    unfold Empty in Hempty.
+    apply (Hempty x a).
+    apply add_1. reflexivity.
+  Qed.
+
   Lemma singleton_singleton : forall A x (a : A),
     Singleton x a (M.add x a (M.empty _)).
   Proof.
@@ -305,6 +527,51 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
     apply M.empty_1.
   Qed.
   #[local] Hint Resolve @singleton_remove : qoreo_db.
+
+
+  Lemma singleton_empty : forall A x a,
+    Singleton x a (M.empty A)
+    <-> False.
+  Proof.
+    intros. unfold Singleton.
+    split; intros H; try contradiction.
+    specialize (H x).
+    autorewrite with qoreo_db in H.
+    compare x x; try discriminate.
+  Qed.
+
+
+  (* not quite true because m might be (M.add y b' empty)...
+    also I'm having trouble with the x=y conclusion.
+  *)
+  Lemma singleton_add_inversion : forall A x (a : A) y b m,
+    Singleton x a (M.add y b m) ->
+    E.eq x y /\ a = b /\ M.Empty (M.remove y m).
+  Proof.
+    intros ? ? ? ? ? ? Hsing.
+    unfold Singleton in Hsing.
+    compare x y.
+    2:{
+      specialize (Hsing y). autorewrite with qoreo_db in Hsing.
+      repeat reduce_eq_dec.
+      discriminate.
+    }
+    split; try reflexivity.
+    split.
+    { (* a = b *)
+      specialize (Hsing x).
+      autorewrite with qoreo_db in Hsing.
+      repeat reduce_eq_dec.
+      inversion Hsing; auto.
+    }
+    (* Empty *)
+    intros z c.
+    specialize (Hsing z).
+    intros Hmapsto; apply F.find_mapsto_iff in Hmapsto.
+    autorewrite with qoreo_db in *.
+    reduce_eq_dec; [discriminate | ].
+    rewrite Hsing in Hmapsto; discriminate.
+  Qed.
 
   Ltac subst_eq_hypothesis_fwd m :=
     repeat match goal with
@@ -346,19 +613,158 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       end
     end.
 
+  Lemma Empty_concat : forall A (m1 m2 : M.t A),
+    M.Empty (concat m1 m2) <-> M.Empty m1 /\ M.Empty m2.
+  Proof.
+    intros A m1 m2.
+    split; intros Hempty.
+    * apply empty_map_equal in Hempty.
+      split; intros z a HMapsTo;
+      apply F.find_mapsto_iff in HMapsTo. 
+      + specialize (Hempty z);
+        autorewrite with qoreo_db in *;
+        rewrite HMapsTo in Hempty.
+        discriminate.
+      + specialize (Hempty z).
+        autorewrite with qoreo_db in *.
+        rewrite HMapsTo in Hempty.
+        destruct (find z m1); discriminate.
+    * destruct Hempty as [H1 H2];
+      apply empty_map_equal in H1;
+      apply empty_map_equal in H2.
+      intros z a HMapsTo.
+      apply F.find_mapsto_iff in HMapsTo.
+      specialize (H1 z).
+      specialize (H2 z).
+      autorewrite with qoreo_db in *.
+      rewrite H1 in *.
+      rewrite H2 in *.
+      discriminate. 
+  Qed.
+
+
+  Lemma Empty_find : forall A (m : t A),
+    M.Empty m <-> forall z, M.find z m = None.
+  Proof.
+    intros A m. unfold Empty.
+    split; intros Hin.
+    * intros z.
+      apply F.not_find_in_iff.
+      intros [a Ha].
+      apply Hin in Ha; auto.
+    * intros z a Hmaps.
+      specialize (Hin z).
+      apply F.not_find_in_iff in Hin.
+      apply Hin. exists a; auto.
+  Qed.
+
   Ltac simpl_Empty :=
       match goal with
+      | [ H : M.Empty (M.add _ _ _) |- _ ] =>
+        exfalso; apply (add_not_Empty _ _ _ _ H)
       | [ H : M.Empty (M.map _ _) |- _ ] =>
         apply empty_map_Empty in H
       | [ |- M.Empty (M.map _ _) ] =>
         apply empty_map_Empty
+(*      | [ H : M.Empty (M.remove _ _) |- _ ] =>
+        apply Empty_remove in H *)
+      | [ |- Empty (empty _) ] => apply M.empty_1
+      | [ H : M.Empty (concat _ _) |- _ ] =>
+        rewrite <- Empty_concat in H; destruct H
+      | [ |- M.Empty (concat _ _) ] =>
+        rewrite Empty_concat
 
-      (* Replace any instances of Empty m with m == empty
+      (* Replace any remaining instances of Empty m with m == empty
       and substitute *)
       | [ H : M.Empty ?m |- _ ] =>
         apply empty_map_equal in H;
         subst_map
       end.
+
+  Lemma Singleton_concat : forall A x (a : A) m1 m2,
+    Singleton x a (concat m1 m2) ->
+    Singleton x a m1 \/ (Empty m1 /\ Singleton x a m2).
+  Proof.
+    intros ? ? ? ? ? Hsing.
+    destruct (find x m1) as [a' | ] eqn:Hfind.
+    * (* if x occurs in m1 *)
+      left.
+      unfold Singleton in *.
+      intros z.
+      specialize (Hsing z).
+      autorewrite with qoreo_db in *.
+      compare x z.
+      + rewrite Heq in *.
+        rewrite Hfind in Hsing.
+        inversion Hsing; subst; auto.
+      + destruct (find z m1); auto; discriminate.
+    * (* x not in m1 *)
+      right.
+      split.
+      + intros z b Hmapsto.
+        apply F.find_mapsto_iff in Hmapsto.
+        specialize (Hsing z).
+        autorewrite with qoreo_db in *.
+        rewrite Hmapsto in Hsing.
+        compare x z; inversion Hsing; subst; clear Hsing.
+        rewrite Hfind in *; discriminate.
+      + intros z.
+        compare x z.
+        - (* x = z *) 
+          specialize (Hsing x).
+          autorewrite with qoreo_db in *.
+          rewrite Hfind in Hsing; auto.
+        - (* x <> z *)
+          autorewrite with qoreo_db in *.
+          compare x z.
+          specialize (Hsing z).
+          autorewrite with qoreo_db in Hsing.
+          reduce_eq_dec.
+          destruct (find z m1); try discriminate; auto.
+  Qed.
+
+  Lemma Singleton_map : forall A B x (b : B) (f : A -> B) m,
+    Singleton x b (map f m) <->
+    exists a, f a = b /\ Singleton x a m.
+  Proof.
+    intros. unfold Singleton.
+    split.
+    * intros Heq.
+      specialize (Heq x) as Hx.
+      autorewrite with qoreo_db in Hx; reduce_eq_dec.
+      destruct (find x m) as [a | ] eqn:Hfind;
+        simpl in Heq; inversion Hx; subst; clear Hx.
+        
+      exists a. split; auto.
+      intros z. specialize (Heq z).
+      autorewrite with qoreo_db in *.
+      reduce_eq_dec; auto.
+      destruct (find z m); auto; discriminate.
+    * intros [a [Ha Hm]]. subst.
+      rewrite Hm.
+      autorewrite with qoreo_db.
+      reflexivity.
+  Qed.
+
+  Ltac simpl_Singleton :=
+    match goal with
+    | [ H : Singleton _ _ (M.add _ _ _) |- _ ] =>
+      apply singleton_add_inversion in H;
+      destruct H as [? [? ?]]; subst
+    | [ |- Singleton ?x _ (M.add ?a _ (M.empty _)) ] =>
+      apply singleton_singleton
+    | [ H : Singleton _ _ (empty _) |- _ ] =>
+      rewrite singleton_empty in H; contradiction
+    | [ H : Singleton _ _ (concat _ _) |- _ ] =>
+      apply Singleton_concat in H
+    | [ H : Singleton _ _ (map _ _) |- _ ] =>
+      rewrite Singleton_map in H;
+      destruct H as [? [? ?]]
+
+    (* Replace any remaining instances of Singleton with its definition *)
+    | [ H : Singleton _ _ _ |- _ ] => unfold Singleton in *; subst_map
+    | [ |- Singleton _ _ _ ] => unfold Singleton in *; subst_map
+    end.
 
   (** Lemmas about disjointness *)
 
@@ -422,7 +828,14 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
   Lemma disjoint_remove_1 : forall {A} (m1 m2 : M.t A) x,
     Disjoint m1 m2 ->
     Disjoint (M.remove x m1) m2.
-  Admitted.
+  Proof.
+    intros.
+    unfold Disjoint in *.
+    intros z.
+    rewrite F.remove_in_iff.
+    intros [[Hneq Hin1] Hin2].
+    apply (H z); auto.
+  Qed.
 
   Lemma disjoint_remove_2 : forall {A} (m1 m2 : M.t A) x,
     Disjoint m1 m2 ->
@@ -433,8 +846,69 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
     apply disjoint_sym. auto.
   Qed.
 
+  Lemma disjoint_in_l : forall {A} (m1 m2 : M.t A) x,
+    Disjoint m1 m2 ->
+    M.In x m1 ->
+    ~ M.In x m2.
+  Proof.
+    intros A m1 m2 x Hdisj Hin1 Hin2.
+    apply (Hdisj x); auto.
+  Qed.
+  #[local] Hint Resolve disjoint_in_l : qoreo_db.
+
+  Lemma disjoint_in_r : forall {A} (m1 m2 : M.t A) x,
+    Disjoint m1 m2 ->
+    M.In x m2 ->
+    ~ M.In x m1.
+  Proof.
+    intros A m1 m2 x Hdisj Hin2 Hin1.
+    apply (Hdisj x); auto.
+  Qed.
+  #[local] Hint Resolve disjoint_in_r : qoreo_db.
+
+
+  Lemma disjoint_add_1 : forall A m1 m2 x (a : A),
+    Disjoint (M.add x a m1) m2 <-> Disjoint m1 m2 /\ ~ M.In x m2.
+  Proof.
+    intros.
+    split; intros Hdisj; try split.
+    * intros z [Hin1 Hin2].
+      apply (Hdisj z). split; auto.
+      autorewrite with qoreo_db.
+      auto.
+    * intros Hin2.
+      apply (Hdisj x).
+      split; auto.
+      autorewrite with qoreo_db.
+      left; reflexivity.
+
+    * destruct Hdisj as [Hdisj Hin].
+      intros z [Hin1 Hin2].
+      autorewrite with qoreo_db in Hin1.
+      destruct Hin1 as [Heq | Hin1].
+      { rewrite Heq in Hin; contradiction. }
+      { apply (Hdisj z); auto. }
+  Qed.
+  Lemma disjoint_add_2 : forall A m1 m2 x (a : A),
+    Disjoint m1 (M.add x a m2) <-> Disjoint m1 m2 /\ ~ M.In x m1.
+  Proof.
+    intros.
+    split; [intros Hdisj | intros [Hdisj Hin]];
+      apply disjoint_sym in Hdisj.
+    {
+      apply disjoint_add_1 in Hdisj.
+      destruct Hdisj; split; auto.
+      apply disjoint_sym; auto.
+    }
+    {
+      apply disjoint_sym.
+      apply disjoint_add_1.
+      auto.
+    }
+  Qed.
+
   Ltac reduce_disjoint :=
-  repeat match goal with
+  match goal with
         | [ H : Disjoint ?m1 ?m2 |- Disjoint ?m2 ?m1 ] =>
           apply disjoint_sym; exact H
 
@@ -529,6 +1003,28 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
     exfalso. apply (Hdisj z). split.
     - apply F.in_find_iff. rewrite Hfind1; discriminate.
     - apply F.in_find_iff. rewrite Hfind2; discriminate.
+  Qed.
+
+  Lemma concat_add_l : forall A x (a : A) m1 m2,
+    M.Equal (concat (M.add x a m1) m2)
+            (M.add x a (concat m1 m2)).
+  Proof.
+    intros A x a m1 m2 z.
+    autorewrite with qoreo_db.
+    reduce_eq_dec; auto.
+  Qed.
+  #[local] Hint Rewrite @concat_add_l : qoreo_db.
+
+  Lemma concat_add_r : forall A x (a : A) m1 m2,
+    ~ M.In x m1 ->
+    M.Equal (concat m1 (M.add x a m2))
+            (M.add x a (concat m1 m2)).
+  Proof.
+    intros A x a m1 m2 Hin z.
+    autorewrite with qoreo_db.
+    compare x z.
+    - apply F.not_find_in_iff in Hin. rewrite Hin; auto.
+    - auto.
   Qed.
 
   Ltac reflect_partition :=
@@ -632,18 +1128,67 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
   Lemma partition_empty_inv1 : forall {A} (Δ1 Δ2 : M.t A),
     Partition (M.empty _) Δ1 Δ2 ->
     M.Equal Δ1 (M.empty _).
-  Admitted.
+  Proof.
+    intros ? ? ? [Hdisj Hmapsto].
+    intros z.
+    autorewrite with qoreo_db.
+    destruct (find z Δ1) eqn:Hfind; auto.
+    exfalso.
+    absurd (MapsTo z a (empty A)).
+    { autorewrite with qoreo_db. auto. }
+    {
+      apply Hmapsto.
+      left.
+      apply F.find_mapsto_iff; auto.
+    }
+  Qed.
 
   Lemma partition_empty_inv2 : forall {A} (Δ1 Δ2 : M.t A),
     Partition (M.empty _) Δ1 Δ2 ->
     M.Equal Δ2 (M.empty _).
-  Admitted.
+  Proof.
+    intros ? ? ? Hpart.
+    apply Properties.Partition_sym in Hpart.
+    apply partition_empty_inv1 in Hpart; auto.
+  Qed.
 
-  Lemma partition_map_iff : forall A B (f : A -> B) m m1 m2,
-    Partition m m1 m2 <->
+  (* Only true in both directions if f is injective *)
+  Lemma partition_map : forall A B (f : A -> B) m m1 m2,
+    Partition m m1 m2 ->
     Partition (M.map f m) (M.map f m1) (M.map f m2).
-  Admitted.
+  Proof.
+    intros ? ? ? ? ? ? Hpart.
+    reflect_partition.
+    + apply disjoint_map; auto.
+    + intros z. autorewrite with qoreo_db.
+      destruct (find z m1) as [a | ] eqn:Hfind1;
+        simpl; auto. 
+  Qed.
 
+  Lemma map_partition : forall A B (f : A -> B) m m1 m2,
+    (forall x y, f x = f y -> x = y) ->
+    Partition (M.map f m) (M.map f m1) (M.map f m2) ->
+    Partition m m1 m2.
+  Proof.
+      intros ? ? ? ? ? ? Hinj Hpart.
+      reflect_partition; apply disjoint_map in Hdisj; auto.
+      intros z.
+      specialize (Heq z).
+      autorewrite with qoreo_db in *.
+      destruct (find z m1) eqn:Hfind1.
+      {
+        destruct (find z m); simpl in Heq;
+          inversion Heq; auto.
+        apply Hinj in H0; subst; auto.
+      }
+      simpl in Heq.
+      destruct (find z m); destruct (find z m2);
+        auto;
+        inversion Heq.
+      apply Hinj in H0; subst; auto.
+  Qed.
+
+  (*
   Lemma partition_map_inv : forall A B (f : A -> B) m n1 n2,
     Partition (M.map f m) n1 n2 ->
     exists m1 m2,
@@ -652,17 +1197,119 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       M.Equal n2 (M.map f m2)
       /\
       Partition m m1 m2.
+  Proof.
   Admitted.
+  *)
 
   Lemma partition_empty1_eq : forall A m m0,
       Partition m (M.empty A) m0 ->
       M.Equal m m0.
-  Admitted.
+  Proof.
+    intros ? ? ? Hpart.
+    reflect_partition.
+    intros z. autorewrite with qoreo_db.
+    auto.
+  Qed.
 
   Lemma partition_empty2_eq : forall A m m0,
       Partition m m0 (M.empty A) ->
       M.Equal m m0.
-  Admitted.
+  Proof.
+    intros ? ? ? Hpart.
+    reflect_partition.
+    intros z. autorewrite with qoreo_db.
+    destruct (find z m0); auto.
+  Qed.
+
+  #[local] Hint Rewrite F.remove_in_iff : qoreo_db.
+  #[local] Hint Rewrite F.remove_mapsto_iff : qoreo_db.
+
+  Lemma partition_add_inversion : forall A (a : A) x m m1 m2,
+    Partition (M.add x a m) m1 m2 ->
+    ~ M.In x m ->
+    (M.MapsTo x a m1 /\ ~ M.In x m2 /\ Partition m (M.remove x m1) m2)
+    \/
+    (~ M.In x m1 /\ M.MapsTo x a m2 /\ Partition m m1 (M.remove x m2)).
+  Proof.
+    intros ? ? ? ? ? ? Hpart Hin.
+    assert (Hfind : (find x m1 = Some a /\ find x m2 = None) \/ 
+                    (find x m1 = None   /\ find x m2 = Some a)).
+    {
+      reflect_partition.
+      specialize (Heq x). autorewrite with qoreo_db in Heq.
+      reduce_eq_dec.
+      destruct (find x m1) as [b | ] eqn:Hfind1.
+      + left. inversion Heq; subst; clear Heq. split; auto.
+        destruct (find x m2) as [? | ] eqn:Hfind2; auto.
+        (* contradiction *)
+        exfalso. apply (Hdisj x). 
+        repeat rewrite F.in_find_iff.
+        rewrite Hfind1, Hfind2.
+        split; discriminate.
+      + right. auto.
+    }
+
+    apply (partition_remove x) in Hpart.
+    rewrite remove_add in Hpart.
+    reduce_eq_dec.
+    rewrite (remove_not_in _ x m) in Hpart; auto.
+    
+    destruct Hfind as [[Hfind1 Hfind2] | [Hfind1 Hfind2]].
+    + apply F.find_mapsto_iff in Hfind1.
+      apply F.not_find_in_iff in Hfind2.
+      left. split; auto. split; auto.
+      rewrite (remove_not_in _ x m2) in Hpart; auto.
+    + apply F.find_mapsto_iff in Hfind2.
+      apply F.not_find_in_iff in Hfind1.
+      right. split; auto. split; auto.
+      rewrite (remove_not_in _ x m1) in Hpart; auto.
+  Qed.
+
+
+  Lemma partition_not_in_inversion : forall A (m m1 m2 : M.t A) x,
+    Partition m m1 m2 ->
+    ~ M.In x m <->
+    ~ M.In x m1 /\ ~ M.In x m2.
+  Proof.
+    intros ? ? ? ? ? Hpart.
+    reflect_partition.
+    autorewrite with qoreo_db.
+    intuition.
+  Qed.
+
+
+  (* move m to the left-most element of the concatenation list *)
+  Ltac reduce_concat :=
+    repeat match goal with
+    | [ |- M.Equal (concat ?m _) (concat ?m _)] =>
+      apply concatProper; try reflexivity
+    | [ |- M.Equal (concat ?m _) (concat ?m0 ?m1)] =>
+      rewrite (concat_sym m0 m1);
+        [ | auto with var_db ];
+      repeat rewrite <- concat_assoc
+    end.
+
+    (*
+  Ltac partition_concat :=
+    match goal with
+    | [ |- Partition (concat ?m1 ?m2) ?m1 _ ] =>
+      reflect_partition;
+        [ | reflexivity];
+        vsimpl; auto with var_db
+
+    | [ |- Partition (concat ?m1 ?m2) ?m2 _ ] =>
+      reflect_partition;
+        [ | rewrite (concat_sym m1 m2); auto;
+            try reflexivity];
+        vsimpl; auto with var_db
+
+    | [ |- Partition _ (concat _ _) _ ] =>
+      reflect_partition; vsimpl; auto with var_db
+    | [ |- Partition _ _ (concat _ _) ] =>
+      reflect_partition; vsimpl; auto with var_db
+    end;
+    reduce_concat.
+    *)
 
   Ltac reduce_partition :=
     match goal with
@@ -685,16 +1332,26 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
         apply partition_empty2_eq in H;
         subst_map
 
+      (* partitions with add *)
+      (*
+      | [ H : Partition (M.add _ _ _) _ _ |- _ ] =>
+        apply partition_add_inversion in H; auto;
+        try destruct H as [[? [? ?]] | [? [? ?]]]
+      *)
+
       (* Partitions with remove *)
       | [ |- Partition (M.remove ?x _) (M.remove ?x _) (M.remove ?x _) ] =>
         apply partition_remove
 
       (* Partitions with map *)
       | [ |- Partition (M.map ?f _) (M.map ?f _) (M.map ?f _) ] =>
-        apply partition_map_iff
+        apply partition_map
+      (*
       | [ H : Partition (M.map ?f _) (M.map ?f _) (M.map ?f _) |- _ ] =>
-        apply partition_map_iff in H
-
+        apply map_partition in H
+        
+        *)
+      (*
       | [H : Partition (M.map ?f ?m) ?n1 ?n2 |- _] =>
         let m1 := fresh "m1" in
         let m2 := fresh "m2" in
@@ -703,12 +1360,117 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
         destruct (partition_map_inv _ _ _ _ _ _ H)
           as [m1 [m2 [Heq1 [Heq2 Hpart]]]]; auto;
         subst_map; try rewrite Heq1, Heq2 in *; try clear n1 Heq1 n2 Heq2
+        *)
+
+
+      (*
+      (* ~In inversion *)
+      | [ Hpart : Partition ?m ?m1 ?m2,
+          Hin : ~ M.In ?x ?m |- _ ] =>
+        let Hin' := fresh "Hin" in
+        assert (Hin' : ~ M.In x m1 /\ ~ M.In x m2)
+        by (eapply partition_not_in_inversion; eauto);
+        destruct Hin';
+        reduce_concat
+      *)
+
+      (* Partition with concat *)
+
+      | [ |- Partition (concat ?m1 ?m2) ?m1 _ ] =>
+        reflect_partition;
+          [ | reflexivity];
+        reduce_concat
+
+      | [ |- Partition (concat ?m1 ?m2) ?m2 _ ] =>
+        reflect_partition;
+          [ | rewrite (concat_sym m1 m2); auto;
+              try reflexivity];
+        reduce_concat
+
+      | [ |- Partition _ (concat _ _) _ ] =>
+        reflect_partition; reduce_concat
+      | [ |- Partition _ _ (concat _ _) ] =>
+        reflect_partition; reduce_concat
     end.
+
+(*
+  Ltac decide_equal :=
+    repeat match goal with
+    | [ H : M.MapsTo ?x ?a ?m |- Some ?a = M.find ?x ?m ] =>
+      symmetry; apply M.find_1; auto
+    | [ H : M.MapsTo ?x ?a ?m |- M.find ?x ?m = Some ?a ] =>
+      apply M.find_1; auto
+    | [ |- M.Equal _ _ ] =>
+      intros z; autorewrite with var_db;
+      repeat reduce_eq_dec; auto with var_db
+    end; fail.
+    *)
+
+  (* reflect_find db: normalizes In/MapsTo hypotheses to find-based form,
+     then reduces the goal using autorewrite with db in * + reduce_eq_dec.
+     fmap_decide_with db: calls reflect_find then closes with tauto/auto. *)
+  Ltac reflect_find_body :=
+    match goal with
+    | [ H : M.In ?x ?m |- _ ] =>
+      let v := fresh "v" in
+      destruct H as [v H]; fold (M.MapsTo x v m) in H
+    | [ H : M.MapsTo _ _ _ |- _ ] =>
+      apply F.find_mapsto_iff in H;
+      try rewrite H in *
+    | [ H : ~ M.In ?x (concat ?m1 ?m2) |- _ ] =>
+      rewrite concat_in in H
+    | [ H : ~ (?P \/ ?Q) |- _ ] =>
+      let Hl := fresh in let Hr := fresh in
+      assert (Hl : ~P) by tauto;
+      assert (Hr : ~Q) by tauto;
+      clear H
+    | [ H : ~ M.In ?x ?m |- _ ] =>
+      apply F.not_find_in_iff in H;
+      try rewrite H in *
+    | [ H : Disjoint _ |- _ ] => unfold Disjoint in H
+    | [ H : M.Empty _ |- _ ] => apply Empty_find in H
+
+
+    | [ |- M.Equal _ _ ] => let z := fresh "z" in intro z
+    | [ |- Disjoint _ _ ] => let z := fresh "z" in intro z
+    | [ |- M.In _ _ ] => apply F.in_find_iff
+    | [ |- ~ M.In _ _ ] => apply F.not_find_in_iff
+    | [ |- M.MapsTo _ _ _ ] => apply F.find_mapsto_iff
+    | [ |- M.Empty _ ] =>
+      let z := fresh "z" in 
+      apply Empty_find; intros z
+    
+    | [ H : M.find ?x ?m = _ |- context[M.find ?x ?m] ] => rewrite H
+    end.
+
+  (* instantiate this for each relevant hint database *)
+  Ltac reflect_find :=
+    repeat (
+      reflect_find_body;
+      autorewrite with qoreo_db in *;
+      repeat reduce_eq_dec
+    ).
+  Ltac solve := 
+    reflect_find; first [tauto | auto; fail].
 
   Ltac vsimpl :=
   repeat match goal with
+
+  | [ H : ~ (?P \/ ?Q) |- _ ] =>
+      let Hl := fresh in let Hr := fresh in
+      assert (Hl : ~P) by tauto;
+      assert (Hr : ~Q) by tauto;
+      clear H
+  | [ |- ~ (_ \/ _) ] =>
+    apply Classical_Prop.and_not_or
+  | [ H : _ /\ _ |- _ ] =>
+    destruct H
+
   | [ |- M.Empty _ ] => simpl_Empty
   | [ H : M.Empty _ |- _ ] => simpl_Empty
+
+  | [ |- Singleton _ _ _ ] => simpl_Singleton
+  | [ H : Singleton _ _ _ |- _ ] => simpl_Singleton
 
   | [ |- Disjoint _ _ ] => reduce_disjoint
   | [ H : Disjoint _ _ |- _ ] => reduce_disjoint
@@ -718,8 +1480,17 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
   | [ H : context[Partition _ _ _ ] |- _ ] =>
     reduce_partition
 
+  | [ H : Properties.Add ?x ?a ?m ?m' |- _ ] =>
+    let Heq := fresh "Heq" in
+    assert (Heq : M.Equal m'
+            (M.add x a m))
+      by auto;
+    clear H;
+    subst_map
+
   | [ H : M.Equal _ _ |- _ ] => subst_map
   end.
+
   End Proofs.
 
 
@@ -731,6 +1502,10 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       * subst_map         - eliminates hypotheses of the form Map.Equal m1 m2 by rewriting
       * reflect_partition - converts Partition hypotheses into Disjoint + Map.Equal (concat) form
       * vsimpl            - simplifies hypotheses and goals that use maps
+
+      * reflect_find - simplifies hypotheses and goals by reflecting to the find function
+      * solve - tries to prove goals through reflection to find 
+      * partition_concat  - simplifies goals specifically that deal with the intersection of partition and concatenation
 
     vsimpl builds on the following tactics in MapFacts:
       * simpl_Empty       - simplifies Map.Empty goals/hypotheses and substitutes
@@ -746,6 +1521,9 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
     Ltac subst_map := Proofs.subst_map.
     Ltac reflect_partition := Proofs.reflect_partition.
     Ltac vsimpl := Proofs.vsimpl.
+    Ltac partition_concat := Proofs.partition_concat.
+    Ltac solve := Proofs.solve.
+
   End Tactics.
 
 End FMap_fun.
@@ -771,6 +1549,24 @@ Module Var.
     let f := fun x _ z_fresh => if Nat.leb z_fresh x then (x+1)%nat else z_fresh in
     Map.fold f m 0%nat.
 
+  
+  Ltac simplify :=
+    repeat
+    (autorewrite with var_db in *;
+      Map.Tactics.vsimpl;
+      repeat Map.Tactics.reduce_eq_dec;
+      try (first [tauto | reflexivity | discriminate | auto | intuition]; fail)).
+
+  (* instantiate this for each relevant hint database *)
+  Ltac reflect_find :=
+    repeat (
+      Map.Proofs.reflect_find_body;
+      autorewrite with var_db in *;
+      repeat Map.Tactics.reduce_eq_dec
+    ).
+  Ltac solve := 
+    repeat (reflect_find; first [tauto | discriminate | auto; fail | intuition]).
+
   (* Global var_db hints: instantiations of FMap_fun's local qoreo_db hints for Var.Map *)
   #[global] Hint Rewrite Map.Properties.F.add_mapsto_iff : var_db.
   #[global] Hint Rewrite Map.Properties.F.empty_mapsto_iff : var_db.
@@ -780,16 +1576,20 @@ Module Var.
   #[global] Hint Rewrite Map.Properties.F.add_o : var_db.
   #[global] Hint Rewrite Map.Properties.F.empty_o : var_db.
   #[global] Hint Rewrite Map.Properties.F.map_in_iff : var_db.
+  #[global] Hint Rewrite Map.Properties.F.remove_mapsto_iff : var_db.
+  #[global] Hint Rewrite Map.Properties.F.empty_in_iff : var_db.
+
   #[global] Hint Rewrite Map.Properties.F.remove_in_iff : var_db.
+  #[global] Hint Rewrite Map.Proofs.disjoint_add_1 : var_db.
+  #[global] Hint Rewrite Map.Proofs.disjoint_add_2 : var_db.
 
   #[global] Existing Instance Map.Proofs.singletonProper.
   #[global] Existing Instance Map.Proofs.concatProper.
   #[global] Existing Instance Map.Proofs.domainProper.
 
-  #[global] Hint Resolve Map.empty_1 : var_db.
-  #[global] Hint Resolve Map.Properties.Partition_sym : var_db.
   #[global] Hint Rewrite Map.Proofs.concat_find : var_db.
   #[global] Hint Rewrite Map.Proofs.concat_in : var_db.
+  #[global] Hint Rewrite @Map.Proofs.concat_add_l : var_db.
   #[global] Hint Rewrite @Map.Proofs.map_concat : var_db.
   #[global] Hint Rewrite Map.Proofs.fset_in_union : var_db.
   #[global] Hint Rewrite Map.Proofs.remove_map : var_db.
@@ -798,17 +1598,33 @@ Module Var.
   #[global] Hint Rewrite @Map.Proofs.map_add : var_db.
   #[global] Hint Resolve @Map.Proofs.empty_map_equal : var_db.
   #[global] Hint Rewrite @Map.Proofs.empty_map_empty : var_db.
-  #[global] Hint Resolve @Map.Proofs.singleton_remove : var_db.
   #[global] Hint Rewrite @Map.Proofs.concat_disjoint : var_db.
+  #[global] Hint Rewrite Map.Proofs.add_remove_eq : var_db.
+  #[global] Hint Rewrite Map.Proofs.add_add_eq : var_db.
+  #[global] Hint Rewrite Map.Proofs.singleton_empty : var_db.
+
+  (* separate out more expensive resolves into extra_var_db *)
+  #[global] Hint Resolve Map.empty_1 : var_db.  
+  #[global] Hint Resolve Map.Properties.Partition_sym : extra_var_db.
+  #[global] Hint Resolve @Map.Proofs.singleton_remove : var_db.
+  #[global] Hint Resolve Map.Proofs.add_mapsto : extra_var_db.
   #[global] Hint Resolve Map.Proofs.disjoint_empty_1 Map.Proofs.disjoint_empty_2 : var_db.
+  #[global] Hint Resolve Map.Proofs.disjoint_in_l Map.Proofs.disjoint_in_r : var_db.
   #[global] Hint Resolve Map.Proofs.partition_empty_l : var_db.
   #[global] Hint Resolve Map.Proofs.partition_empty_r : var_db.
+  #[global] Hint Resolve Map.M.remove_1 : var_db.
+  #[global] Hint Resolve Map.Proofs.disjoint_sym : extra_var_db.
+  #[global] Hint Resolve Map.Proofs.concat_assoc : extra_var_db.
 
+  (*
+  #[global] Hint Extern 4 (Map.Partition (Map.concat _ _) _ _) => Map.Proofs.partition_concat : extra_var_db.
+  #[global] Hint Extern 4 (Map.Partition _ (Map.concat _ _) _) => Map.Tactics.partition_concat : extra_var_db.
+  #[global] Hint Extern 4 (Map.Partition _ _ (Map.concat _ _)) => Map.Tactics.partition_concat : extra_var_db.
+*)
 
-  #[global] Hint Rewrite  Map.FSetProperties.inter_iff : var_db.
+  #[global] Hint Rewrite Map.FSetProperties.inter_iff : var_db.
   #[global] Hint Rewrite Map.MProofs.FSetProperties.add_iff: var_db.
   #[global] Hint Rewrite Map.FSetProperties.singleton_iff : var_db.
-
 End Var.
 
 Inductive unitary :=
@@ -837,9 +1653,11 @@ Module Config.
 
   Record WellScoped (refs : Var.Map.t nat) (cfg : t) := {
     wf_qstate : Matrix.WF_Matrix (qstate cfg);
-    wf_qrefs : List.Forall
+    (*wf_qrefs : List.Forall
               (fun x => snd x < dim cfg)%nat
               (Var.Map.elements refs)
+              *)
+    wf_qrefs : forall x, Var.Map.In x refs -> (x < dim cfg)%nat
   }.
 
   
@@ -863,7 +1681,8 @@ Module Config.
     |}).
 
   Definition new (b : bool) refs (cfg : t) : Var.t * Var.Map.t nat * t :=
-    let x := Var.fresh refs in
+    (*let x := Var.fresh refs in*)
+    let x := dim cfg in (* don't want x to depend on refs *)
     let q := dim cfg in
     let rho' := kron (qstate cfg) (bool_to_ket b) in
     (x, Var.Map.add x q refs, {|
@@ -955,6 +1774,149 @@ Module Config.
   Qed.
   *)
 
+  (* Properties of well-scopedness*)
+
+  Global Instance WellScopedProper : Proper (Var.Map.Equal ==> eq ==> iff) Config.WellScoped.
+  Proof.
+    intros refs1 refs2 Hrefs cfg1 cfg2 Hcfg; subst.
+    split; intros [wf_qstate wf_qrefs].
+    + split; auto;
+      intros x; setoid_rewrite <- Hrefs; auto.
+    + split; auto;
+      intros x; setoid_rewrite Hrefs; auto.
+  Qed.
+
+  Lemma WellScoped_concat : forall Θ1 Θ2 cfg,
+    WellScoped (Var.Map.concat Θ1 Θ2) cfg 
+    <->
+    WellScoped Θ1 cfg /\ Config.WellScoped Θ2 cfg.
+  Proof.
+    intros ? ? ?.
+    split.
+    + intros [wf ws].
+      split; split; auto;
+      intros x Hin; apply ws;
+      autorewrite with var_db; auto.
+    + intros [[wf ws1] [_ ws2]].
+      split; auto.
+      intros x Hin. autorewrite with var_db in Hin.
+      destruct Hin as [Hin | Hin];
+        [apply ws1 | apply ws2]; auto.
+  Qed.
+  #[global] Hint Rewrite WellScoped_concat : var_db.
+
+  Lemma WellScoped_empty : forall cfg,
+    WF_Matrix (qstate cfg) ->
+    WellScoped (Var.Map.empty nat) cfg.
+  Proof.
+    intros cfg HWF.
+    split; auto.
+    intros z Hin.
+    autorewrite with var_db in *.
+    contradiction.
+  Qed.
+
+
+  (* The operations on configurations form Proper relations *)
+  Global Instance freshProper : forall A, 
+      Proper (@Var.Map.Equal A ==> eq) Var.fresh.
+  Proof.
+
+    intros A refs1 refs2 Hrefs.
+    unfold Var.fresh.
+    apply Var.Map.Properties.fold_Equal; auto.
+    + intros ? ? ? ? ? ? ? ? ?; subst; auto.
+    + intros ? ? ? ? ? ?.
+    
+      destruct (k' + 1 <=? k) eqn:H_k'_k;
+      destruct (a <=? k') eqn:Hk';
+      destruct (a <=? k) eqn:Hk;
+      destruct (k+1 <=? k') eqn:H_k_k';
+      auto;
+        try 
+        (try rewrite Nat.leb_le in *;
+        try rewrite Nat.leb_nle in *;
+        lia).
+      * rewrite H_k'_k; auto.
+      * rewrite Hk'; auto.
+      * rewrite H_k'_k; auto.
+      * rewrite H_k'_k; auto. rewrite Hk'; auto.
+      * rewrite Hk'; auto.
+  Qed.   
+
+
+      
+  Global Instance find_Proper : Proper (eq ==> Var.Map.Equal ==> eq) find.
+  Proof.
+    intros x' x Hx refs1 refs2 Hrefs; subst.
+    unfold Config.find. rewrite Hrefs; auto.
+  Qed.
+
+  Lemma measure_Proper : forall b x cfg refs1 refs2 refs1' refs2' cfg1' cfg2',
+    Var.Map.Equal refs1 refs2 ->
+    measure b x refs1 cfg = (refs1', cfg1') ->
+    measure b x refs2 cfg = (refs2', cfg2') ->
+    Var.Map.Equal refs1' refs2' /\ cfg1' = cfg2'.
+  Proof.
+    intros ? ? ? ? ? ? ? ? ?.
+    intros Heq Hmeas1 Hmeas2.
+    inversion Hmeas1; inversion Hmeas2; subst; clear Hmeas1 Hmeas2.
+    split.
+    + rewrite Heq. reflexivity.
+    + unfold find. rewrite Heq. reflexivity.
+  Qed.
+
+  Global Instance measureProper :
+    Proper (eq ==> eq ==> Var.Map.Equal ==> eq ==>
+      RelationPairs.RelProd Var.Map.Equal eq)
+      measure.
+  Proof.
+    intros ? b ? ? x ? refs1 refs2 Hrefs ? cfg ?;
+      subst.
+    
+    eapply (measure_Proper b x cfg) in Hrefs;
+      try reflexivity.
+    destruct Hrefs as [Heq Heq'].
+    split; unfold RelationPairs.RelCompFun;
+      simpl; auto.
+  Qed.
+
+  Global Instance newProper :
+    Proper (eq ==> Var.Map.Equal ==> eq ==>
+      RelationPairs.RelProd (RelationPairs.RelProd eq Var.Map.Equal) eq)
+      new.
+  Proof.
+    intros ? b ? refs1 refs2 Hrefs ? cfg ?; subst.
+    repeat split; unfold RelationPairs.RelCompFun;
+      simpl; auto.
+    rewrite Hrefs; reflexivity.
+  Qed.
+
+  Global Instance eprProper :
+    Proper (Var.Map.Equal ==> eq ==>
+      RelationPairs.RelProd
+      (RelationPairs.RelProd eq Var.Map.Equal)
+      eq)
+      epr.
+  Proof.
+    intros refs1 refs2 Hrefs ? cfg ?; subst;
+    repeat split; unfold RelationPairs.RelCompFun;
+      simpl; auto.
+    * rewrite Hrefs; auto.
+    * rewrite Hrefs. reflexivity.
+  Qed. 
+
+  Global Instance apply_gate_Proper :
+    Proper (eq ==> eq ==> Var.Map.Equal ==> eq ==> eq) apply_gate.
+  Proof.
+    intros g' g Hg ls' ls Hls refs1 refs2 Hrefs cfg1 cfg2 Hcfg;
+      subst.
+    unfold Config.apply_gate.
+    f_equal. f_equal.
+    apply Proper_map; auto.
+    intros x. rewrite Hrefs; auto.
+  Qed.
+
 End Config.
 
 (* This could be instantiated in different ways. *)
@@ -979,8 +1941,23 @@ Module Actor.
   Module Map := FMap(V).
   Module FSet := Map.S.
 
-(*  #[global] Existing Instance MapProofs.F.EqualSetoid.*)
+  Ltac simplify :=
+    autorewrite with actor_db;
+    Map.Tactics.vsimpl;
+    try (intuition; fail).
 
+  (* instantiate this for each relevant hint database *)
+  Ltac reflect_find :=
+    repeat (
+      Map.Proofs.reflect_find_body;
+      autorewrite with actor_db in *;
+      repeat Map.Tactics.reduce_eq_dec
+    ).
+  Ltac fmap_decide := 
+    reflect_find; first [tauto | auto].
+
+(*  #[global] Existing Instance MapProofs.F.EqualSetoid.*)
+  
   (* Global actor_db hints: instantiations of FMap_fun's local qoreo_db hints for Actor.Map *)
   #[global] Hint Rewrite Map.Properties.F.add_mapsto_iff : actor_db.
   #[global] Hint Rewrite Map.Properties.F.empty_mapsto_iff : actor_db.
@@ -990,9 +1967,14 @@ Module Actor.
   #[global] Hint Rewrite Map.Properties.F.add_o : actor_db.
   #[global] Hint Rewrite Map.Properties.F.empty_o : actor_db.
   #[global] Hint Rewrite Map.Properties.F.map_in_iff : actor_db.
+  #[global] Hint Rewrite Map.Properties.F.remove_mapsto_iff : actor_db.
+  #[global] Hint Rewrite Map.Properties.F.empty_in_iff : actor_db.
+
   #[global] Hint Resolve Map.empty_1 : actor_db.
   #[global] Hint Resolve Map.Properties.Partition_sym : actor_db.
-  #[global] Hint Rewrite Map.Properties.F.remove_in_iff : var_db.
+  #[global] Hint Rewrite Map.Properties.F.remove_in_iff : actor_db.
+  #[global] Hint Rewrite Map.Proofs.disjoint_add_1 : actor_db.
+  #[global] Hint Rewrite Map.Proofs.disjoint_add_2 : actor_db.
 
   #[global] Existing Instance Map.Proofs.singletonProper.
   #[global] Existing Instance Map.Proofs.concatProper.
@@ -1000,6 +1982,7 @@ Module Actor.
 
   #[global] Hint Rewrite Map.Proofs.concat_find : actor_db.
   #[global] Hint Rewrite Map.Proofs.concat_in : actor_db.
+  #[global] Hint Rewrite @Map.Proofs.concat_add_l : actor_db.
   #[global] Hint Rewrite @Map.Proofs.map_concat : actor_db.
   #[global] Hint Rewrite Map.Proofs.fset_in_union : actor_db.
   #[global] Hint Rewrite Map.Proofs.remove_map : actor_db.
@@ -1010,9 +1993,24 @@ Module Actor.
   #[global] Hint Rewrite @Map.Proofs.empty_map_empty : actor_db.
   #[global] Hint Resolve @Map.Proofs.singleton_remove : actor_db.
   #[global] Hint Rewrite @Map.Proofs.concat_disjoint : actor_db.
+  #[global] Hint Rewrite Map.Proofs.add_remove_eq : actor_db.
+  #[global] Hint Rewrite Map.Proofs.add_add_eq : actor_db.
+  #[global] Hint Rewrite Map.Proofs.singleton_empty : actor_db.
+
+  #[global] Hint Resolve Map.Proofs.add_mapsto : actor_db.
   #[global] Hint Resolve Map.Proofs.disjoint_empty_1 Map.Proofs.disjoint_empty_2 : actor_db.
+  #[global] Hint Resolve Map.Proofs.disjoint_in_l Map.Proofs.disjoint_in_r : actor_db.
   #[global] Hint Resolve Map.Proofs.partition_empty_l : actor_db.
   #[global] Hint Resolve Map.Proofs.partition_empty_r : actor_db.
+  #[global] Hint Resolve Map.M.remove_1 : actor_db.
+  #[global] Hint Resolve Map.Proofs.disjoint_sym : actor_db.
+  #[global] Hint Resolve Map.Proofs.concat_assoc : actor_db.
+
+  (*
+  #[global] Hint Extern 4 (Map.Partition (Map.concat _ _) _ _) => Map.Proofs.partition_concat : actor_db.
+  #[global] Hint Extern 4 (Map.Partition _ (Map.concat _ _) _) => Map.Tactics.partition_concat : actor_db.
+  #[global] Hint Extern 4 (Map.Partition _ _ (Map.concat _ _)) => Map.Tactics.partition_concat : actor_db.
+  *)
 
   #[global] Hint Rewrite Map.FSetProperties.inter_iff : actor_db.
   #[global] Hint Rewrite Map.MProofs.FSetProperties.add_iff: actor_db.
@@ -1038,43 +2036,59 @@ Module ChorEnv.
     Definition MapsTo {T} (A : Actor.t) (x : Var.t) (tau : T) (G : t T) : Prop :=
       Var.Map.MapsTo x tau (find A G).
 
+    
+    Definition epr (A B : Actor.t) (refs : t nat) (cfg : Config.t)
+                  : Var.t * Var.t * t nat * Config.t :=
+      match Config.epr_cfg cfg with
+      | (idx1, idx2, cfg') =>
+        let x1 := Var.fresh (find A refs) in
+        let refs' := add A x1 idx1 refs in
+        let x2 := Var.fresh (find B refs') in
+        let refs'' := add B x2 idx2 refs' in
 
-  Definition epr (A B : Actor.t) (refs : t nat) (cfg : Config.t)
-                 : Var.t * Var.t * t nat * Config.t :=
-    match Config.epr_cfg cfg with
-    | (idx1, idx2, cfg') =>
-      let x1 := Var.fresh (find A refs) in
-      let refs' := add A x1 idx1 refs in
-      let x2 := Var.fresh (find B refs') in
-      let refs'' := add B x2 idx2 refs' in
+        (x1, x2, refs'', cfg')
+      end.
 
-      (x1, x2, refs'', cfg')
-    end.
+    Lemma MapsTo_add : forall T A x (tau : T) G,
+      ChorEnv.MapsTo A x tau G ->
+      ChorEnv.Equal (ChorEnv.add A x tau G)
+                    G.
+    Proof.
+      intros T A x tau G H.
+      unfold ChorEnv.Equal.
+      unfold Actor.Map.Equiv, ChorEnv.add, ChorEnv.MapsTo, ChorEnv.find in *.
+      split; [intros B | intros B a1 a2];
+        autorewrite with actor_db var_db in *.
+      * split; auto.
+        intros [? | ?]; auto; subst.
+        apply Actor.Map.Properties.F.in_find_iff.
+        destruct (Actor.Map.find B G); try discriminate.
+        apply Var.Map.Properties.F.empty_mapsto_iff in H; auto.
+      * intros [ [? Hfind] | [? Ha1] ] Hmaps; subst.
+        + apply Actor.Map.Properties.F.find_mapsto_iff in Hmaps.
+          rewrite Hmaps in *; auto.
+          apply Var.Map.Properties.F.find_mapsto_iff in H.
+          intros z; autorewrite with var_db.
+          Var.Map.Tactics.compare x z; auto.
+        + apply Actor.Map.Properties.F.find_mapsto_iff in Hmaps.
+          apply Actor.Map.Properties.F.find_mapsto_iff in Ha1.
+          rewrite Hmaps in Ha1.
+          inversion Ha1; subst; reflexivity.
+    Qed.
 
-Lemma MapsTo_add : forall T A x (tau : T) G,
-  ChorEnv.MapsTo A x tau G ->
-  ChorEnv.Equal (ChorEnv.add A x tau G)
-                G.
-Proof.
-  intros T A x tau G H.
-  unfold ChorEnv.Equal.
-  unfold Actor.Map.Equiv, ChorEnv.add, ChorEnv.MapsTo, ChorEnv.find in *.
-  split; [intros B | intros B a1 a2];
-    autorewrite with actor_db var_db in *.
-  * split; auto.
-    intros [? | ?]; auto; subst.
-    apply Actor.Map.Properties.F.in_find_iff.
-    destruct (Actor.Map.find B G); try discriminate.
-    apply Var.Map.Properties.F.empty_mapsto_iff in H; auto.
-  * intros [ [? Hfind] | [? Ha1] ] Hmaps; subst.
-    + apply Actor.Map.Properties.F.find_mapsto_iff in Hmaps.
-      rewrite Hmaps in *; auto.
-      apply Var.Map.Properties.F.find_mapsto_iff in H.
-      intros z; autorewrite with var_db.
-      Var.Map.Tactics.compare x z; auto.
-    + apply Actor.Map.Properties.F.find_mapsto_iff in Hmaps.
-      apply Actor.Map.Properties.F.find_mapsto_iff in Ha1.
-      rewrite Hmaps in Ha1.
-      inversion Ha1; subst; reflexivity.
-Qed.
+
+
+    Lemma find_add : forall T A B x (a : T) G,
+      Var.Map.Equal
+        (ChorEnv.find A (ChorEnv.add B x a G))
+        (if Actor.eq_dec A B then Var.Map.add x a (ChorEnv.find A G) else ChorEnv.find A G).
+    Proof.
+      intros.
+      unfold ChorEnv.add, ChorEnv.find.
+      autorewrite with actor_db.
+      repeat Actor.Map.Tactics.reduce_eq_dec.
+      + destruct (Actor.Map.find B G); try reflexivity.
+      + destruct (Actor.Map.find B G); try reflexivity.
+    Qed.
+    #[global] Hint Rewrite find_add : var_db.
 End ChorEnv.
