@@ -140,12 +140,14 @@ Fixpoint epp (p : Actor.t) (c : Choreography.t): option Process.t :=
   | [] => Some []
   | Choreography.Insn.Send A1 e A2 x :: C =>
       match (Actor.eq_dec A1 p, Actor.eq_dec A2 p) with
+      | (left _, left _)  => None
       | (left _, right _) => conso (Insn.Send e A2) (epp p C)
       | (right _, left _) => conso (Insn.Receive x A1) (epp p C)
       | _ => epp p C
       end
   | Choreography.Insn.EPR A1 x1 A2 x2 :: C =>
       match (Actor.eq_dec A1 p, Actor.eq_dec A2 p) with
+      | (left _, left _)  => None
       | (left _, right _) => conso (Insn.EPR x1 A2) (epp p C)
       | (right _, left _) => conso (Insn.EPR x2 A1) (epp p C)
       | _ => epp p C
@@ -175,10 +177,6 @@ Inductive EPP : list Actor.t -> Choreography.t -> Network.t -> Prop :=
 *)
 Inductive EPP : Actor.t -> Choreography.t -> Process.t -> Prop :=
 | EPP_nil : forall A, EPP A [] []
-| EPP_disjoint : forall A I C P,
-  ~ Actor.FSet.In A (Choreography.Insn.actors I) ->
-  EPP A C P ->
-  EPP A (I :: C) P
 
 | EPP_send : forall D A C P B e y,
     D = A ->
@@ -216,11 +214,44 @@ Inductive EPP : Actor.t -> Choreography.t -> Process.t -> Prop :=
     D = A ->
     EPP D C P ->
     EPP D (Choreography.Insn.LetPair A x1 x2 e :: C) (Insn.LetPair x1 x2 e :: P)
+
+| EPP_disjoint : forall A I C P,
+  ~ Actor.FSet.In A (Choreography.Insn.actors I) ->
+  EPP A C P ->
+  EPP A (I :: C) P
 .
 
 Lemma EPP_correct : forall A C P,
     EPP A C P <-> epp A C = Some P.
-Admitted.
+Proof.
+    intros.
+    split.
+    * intros HEPP. 
+      induction HEPP; simpl; auto;
+        subst;
+        try rewrite IHHEPP;
+        Actor.simplify.
+      destruct I; simpl in *;
+        Actor.simplify.
+    * revert A P.
+      induction C as [ | I C]; intros A P Hepp.
+      { 
+        simpl in *.
+        inversion Hepp; subst; clear Hepp.
+        constructor.
+      }
+      simpl in Hepp.
+      destruct (epp A C) eqn:IH.
+      2:{
+        destruct I; Actor.simplify; try rewrite IH in Hepp.
+      }
+      destruct I
+        as [B1 e B2 x | B1 x1 B2 x2 | B x e | B x e | B x1 x2 e];
+        Actor.simplify;
+        inversion Hepp; subst; clear Hepp;
+          constructor; auto;
+        simpl; Actor.simplify.
+Qed.
 
 Definition EPP_N (C : Choreography.t) (N : Network.t) : Prop :=
     forall A PA,
@@ -277,78 +308,157 @@ Proof.
     { contradict HEPPA. simpl; inversion 1. }
     inversion HEPPA; subst;
     inversion HEPPB; subst; simpl in *;
-        autorewrite with actor_db in *.
+      Actor.simplify.
+    * (* send *)
+      apply Choreography.SendB; auto.
+        
     * destruct I as   [ (*Send*) A0 v0 B0 y0
                     | (*EPR*)  A0 x0 B0 y0
                     | (*Let*)  A0 x0 e0
                     | (*Let!*) A0 x0 e0
                     | (*LetPair *) A0 x0 y0 e0
-      ];
-        simpl in *; autorewrite with actor_db in *.
-      + Actor.Map.Tactics.compare A A0; try tauto.
-      
-        apply Choreography.Delay.
-        { eapply IHC'; eauto. }
-        { simpl; intros D. autorewrite with actor_db in *.
-          intros [[? | ?] [? | ?]]; subst; auto.
+      ].
+      + simpl in *. Actor.simplify.
+        apply Choreography.Delay; auto.
+        2:{
+          simpl.
+          intros z.
+          Actor.simplify.
+          intros [Heq1 Heq2].
+          destruct Heq1; destruct Heq2;
+            subst; try contradiction.
         }
-      + apply Choreography.Delay.
-        { eapply IHC'; eauto. }
-        { simpl; intros D. autorewrite with actor_db in *. 
-          intros [[? | ?] [? | ?]]; subst; auto.
-        }
+        eapply IHC'; eauto. 
 
-      + apply Choreography.Delay.
-        { eapply IHC'; eauto. }
-        { simpl; intros D. autorewrite with actor_db. 
-          intros [[? | ?] ?]; subst; auto.
+      + simpl in *. Actor.simplify.
+        apply Choreography.Delay; auto.
+        2:{
+          simpl.
+          intros z.
+          Actor.simplify.
+          intros [Heq1 Heq2].
+          destruct Heq1; destruct Heq2;
+            subst; try contradiction.
         }
-      + apply Choreography.Delay.
-        { eapply IHC'; eauto. }
-        { simpl; intros D. autorewrite with actor_db. 
-          intros [[? | ?] ?]; subst; auto.
+        eapply IHC'; eauto.
+      + simpl in *. Actor.simplify.
+        apply Choreography.Delay; auto.
+        2:{
+          simpl.
+          intros z.
+          Actor.simplify.
+          intros [Heq1 Heq2].
+          destruct Heq1; destruct Heq2;
+            subst; try contradiction.
         }
-      + apply Choreography.Delay.
-        { eapply IHC'; eauto. }
-        { simpl; intros D. autorewrite with actor_db. 
-          intros [[? | ?] ?]; subst; auto.
+        eapply IHC'; eauto.
+      + simpl in *. Actor.simplify.
+        apply Choreography.Delay; auto.
+        2:{
+          simpl.
+          intros z.
+          Actor.simplify.
+          intros [Heq1 Heq2].
+          destruct Heq1; destruct Heq2;
+            subst; try contradiction.
         }
-
-    * absurd (A=A); auto.
-    * absurd (B=B); auto.
-    
-    * repeat Actor.Map.Tactics.reduce_eq_dec.
-      constructor; auto.
+        eapply IHC'; eauto. 
+      + simpl in *. Actor.simplify.
+        apply Choreography.Delay; auto.
+        2:{
+          simpl.
+          intros z.
+          Actor.simplify.
+          intros [Heq1 Heq2].
+          destruct Heq1; destruct Heq2;
+            subst; try contradiction.
+        }
+        eapply IHC'; eauto.
 Qed.
 
-Lemma step_send_EPP_A : forall A B C PA PB v y,
+Lemma step_send_EPP_A : forall C A B PA PB v y,
     EPP A C (Insn.Send v B :: PA) ->
     EPP B C (Insn.Receive y A :: PB) ->
     EPP A (step_send A B C) PA.
-Admitted.
-Lemma step_send_EPP_B : forall A B C PA PB v y,
+Proof.
+  intros C. induction C as [ | I C];
+    intros ? ? ? ? ? ? HA HB;
+    simpl.
+  { inversion HA. }
+  inversion HA; subst; clear HA;
+    simpl; Actor.simplify.
+  { apply EPP_subst_neq; auto. }
+  inversion HB; subst; clear HB;
+    simpl in *; Actor.simplify.
+  destruct I;
+    try (
+        apply EPP_disjoint; auto;
+        eapply IHC; eauto;
+        fail
+    ).
+  simpl in *.
+  Actor.simplify.
+  apply EPP_disjoint; simpl; Actor.simplify.
+  eapply IHC; eauto.
+Qed.
+
+Lemma step_send_EPP_B : forall C A B PA PB v y,
     EPP A C (Insn.Send v B :: PA) ->
     EPP B C (Insn.Receive y A :: PB) ->
-    EPP B (step_send A B C) PB.
-Admitted.
+    EPP B (step_send A B C) (Process.subst y v PB).
+Proof.
+  intros C. induction C as [ | I C];
+    intros ? ? ? ? ? ? HA HB;
+    simpl.
+  { inversion HB. }
+
+  inversion HA; subst; clear HA;
+  inversion HB; subst; clear HB;
+    simpl in *; Actor.simplify.
+  { apply EPP_subst_eq; auto. }
+
+  destruct I;
+    try (
+      apply EPP_disjoint; auto;
+      simpl in *; Var.simplify;
+      eapply IHC; eauto;
+        fail
+    ).
+    
+  simpl in *.
+  Actor.simplify.
+  apply EPP_disjoint; simpl; Actor.simplify.
+  eapply IHC; eauto.
+Qed.
+
 Lemma step_send_EPP_other : forall C D A B PD,
         D <> A ->
         D <> B ->
         EPP D (step_send A B C) PD <-> EPP D C PD.
 Proof.
-    induction C as [ | I C'];
+    induction C as [ | I C];
         intros D A B PD HDA HDB.
     { simpl. reflexivity. }
     simpl. split; intros H.
     * admit.
-    *
-    destruct I as   [ (*Send*) A0 v0 B0 y0
-                    | (*EPR*)  A0 x0 B0 y0
-                    | (*Let*)  A0 x0 e0
-                    | (*Let!*) A0 x0 e0
-                    | (*LetPair *) A0 x0 y0 e0
-    ].
+    * inversion H; subst; clear H;
+      try (
+        Actor.simplify;
+        constructor; auto;
+        rewrite IHC; auto;
+        fail
+      ).
+      rewrite <- (IHC D A B) in *; auto.
+      destruct I;
+        simpl in *; Actor.simplify;
+        try (
+          apply EPP_disjoint; simpl; [ Actor.simplify | eauto];
+          fail
+        ).
+      apply EPP_subst_neq; auto.
+      rewrite <- IHC; eauto.
 Admitted.
+
 
 Lemma step_send_EPP_N : forall A B C PA PB y v N,
     EPP_N C N ->

@@ -1942,9 +1942,11 @@ Module Actor.
   Module FSet := Map.S.
 
   Ltac simplify :=
-    autorewrite with actor_db;
-    Map.Tactics.vsimpl;
-    try (intuition; fail).
+    repeat
+    (autorewrite with actor_db in *;
+      Map.Tactics.vsimpl;
+      repeat Map.Tactics.reduce_eq_dec;
+      try (first [tauto | reflexivity | discriminate | auto | intuition]; fail)).
 
   (* instantiate this for each relevant hint database *)
   Ltac reflect_find :=
@@ -1953,7 +1955,7 @@ Module Actor.
       autorewrite with actor_db in *;
       repeat Map.Tactics.reduce_eq_dec
     ).
-  Ltac fmap_decide := 
+  Ltac solve := 
     reflect_find; first [tauto | auto].
 
 (*  #[global] Existing Instance MapProofs.F.EqualSetoid.*)
