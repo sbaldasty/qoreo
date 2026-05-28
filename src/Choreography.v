@@ -67,8 +67,16 @@ Module Insn.
       end.
     
     Definition bind_eqb (Ax : bindt) (By: bindt) : bool :=
+    (*
       match (bool_of_sumbool (bind_eq_dec Ax By)) with
       | exist _ x _ => x
+      end.
+      *)
+      match Ax, By with
+      | (A, x), (B, y) =>
+        if Actor.eq_dec A B 
+        then if Var.eq_dec x y then true else false
+        else false
       end.
 
     Definition rebound_in (A : Actor.t) (x : Var.t) (I : t) : bool :=

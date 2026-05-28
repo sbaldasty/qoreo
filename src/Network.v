@@ -431,16 +431,96 @@ Proof.
   eapply IHC; eauto.
 Qed.
 
+
+Lemma actors_subst : forall A x v I,
+  Actor.FSet.Equal
+    (Choreography.Insn.actors (Choreography.Insn.subst A x v I))
+    (Choreography.Insn.actors I).
+Proof.
+  intros; destruct I
+    as [ B1 ?e B2 ?x | B1 ?x B2 ?y | B ?x ?e 
+       | B ?x ?e | B ?x1 ?x2 ?e]; simpl in *;
+    reflexivity.
+Qed.
+  
+
+Lemma subst_neq_inversion : forall A x v D C P,
+  D <> A ->
+  EPP D (Choreography.subst A x v C) P ->
+  EPP D C P.
+Proof.
+  intros ? ? ? ? C.
+  induction C as [ | I C]; intros P Hneq H;
+    simpl in H;
+    auto.
+  inversion H; subst; clear H;
+    try match goal with
+    | [ Hsubst : _ = Choreography.Insn.subst _ _ _ I |- _ ] =>
+    destruct I; simpl in *;
+    inversion Hsubst; subst; clear Hsubst
+    end.
+  * Actor.Map.Tactics.compare A t.
+    constructor; auto.
+    Actor.simplify; auto.
+    Var.simplify; auto.
+  * constructor; auto.
+    Actor.simplify; auto.
+  * constructor; auto;
+    Actor.simplify; auto;
+    Var.simplify; auto.
+  * constructor; auto.
+    Actor.simplify; auto;
+    Var.simplify; auto.
+  * Actor.Map.Tactics.compare A t.
+    apply EPP_Let; auto.
+  * Actor.Map.Tactics.compare A t.
+    constructor; auto.
+  * Actor.Map.Tactics.compare A t.
+    constructor; auto.
+  * rewrite actors_subst in *.
+    apply EPP_disjoint; auto.
+    destruct (Choreography.Insn.rebound_in A x I) eqn:Hbound;
+      auto.
+Qed.
+
 Lemma step_send_EPP_other : forall C D A B PD,
         D <> A ->
         D <> B ->
         EPP D (step_send A B C) PD <-> EPP D C PD.
 Proof.
+    intros C D A B.
     induction C as [ | I C];
-        intros D A B PD HDA HDB.
+        intros PD HDA HDB.
     { simpl. reflexivity. }
     simpl. split; intros H.
-    * admit.
+    * destruct (Actor.FSet.mem D (Choreography.Insn.actors I))
+      eqn:Hin;
+        [ apply Actor.Map.FSetProperties.mem_iff in Hin
+        | apply Actor.Map.FSetProperties.not_mem_iff in Hin ].
+
+      + destruct I;
+            simpl in Hin; Actor.simplify;
+            try (
+              try destruct Hin; subst; Actor.simplify;
+              inversion H; subst; clear H; Actor.simplify;
+              try constructor; auto; apply IHC; auto;
+              fail
+            ).
+
+      + assert (EPP D (step_send A B C) PD).
+        {
+          destruct I;
+            simpl in Hin; Actor.simplify;
+            try (
+              inversion H; subst; clear H; Actor.simplify;
+              fail
+            ).
+          apply subst_neq_inversion in H; auto.
+          apply IHC; auto.
+        }
+        apply EPP_disjoint; auto.
+        eapply IHC; auto.
+
     * inversion H; subst; clear H;
       try (
         Actor.simplify;
@@ -448,7 +528,7 @@ Proof.
         rewrite IHC; auto;
         fail
       ).
-      rewrite <- (IHC D A B) in *; auto.
+      rewrite <- IHC in *; auto.
       destruct I;
         simpl in *; Actor.simplify;
         try (
@@ -457,7 +537,7 @@ Proof.
         ).
       apply EPP_subst_neq; auto.
       rewrite <- IHC; eauto.
-Admitted.
+Qed.
 
 
 Lemma step_send_EPP_N : forall A B C PA PB y v N,
