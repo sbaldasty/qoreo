@@ -486,19 +486,44 @@ Proof.
 
 Qed.
 
-(* It would be great to eliminate these Lemmas-- in Map tactics? *)
+(* START Easily(?) proven facts *) 
 Lemma add_empty_delta : forall A x tau (D : ChorEnv.t Expr.typ),
     ~ Actor.Map.Empty (ChorEnv.add A x tau D).
 Proof.
 Admitted.
 
-Lemma find_add : forall A Theta (T : ChorEnv.t nat),
-    (ChorEnv.find A (Actor.Map.add A Theta T)) = Theta.
+Lemma find_add : forall {X : Type} A M (CE : ChorEnv.t X),
+    (ChorEnv.find A (Actor.Map.add A M CE)) = M.
 Proof.
 Admitted.
 
-Lemma addadd : forall A (T : ChorEnv.t nat) Theta1 Theta2,
+Lemma addadd1 : forall A (D : ChorEnv.t Expr.typ) Delta x tau,
+    (Actor.Map.add A Delta (ChorEnv.add A x tau D)) = (Actor.Map.add A Delta D).
+Proof.
+Admitted.
+
+Lemma addadd2 : forall A (T : ChorEnv.t nat) Theta1 Theta2,
     (Actor.Map.add A Theta1 (Actor.Map.add A Theta2 T)) = (Actor.Map.add A Theta1 T).
+Proof.
+Admitted.
+
+Lemma nbeq : forall A B x y,
+    A <> B -> ~ ((Insn.bind_eqb (A,x) (B,y)) = true).
+Proof.
+Admitted.
+
+Lemma nin : forall (Delta : Var.Map.t Expr.typ) Delta1' Delta1 Delta2 x tau,
+    Var.Map.add x tau Delta1' = Delta1 ->
+    Var.Map.Partition Delta Delta1 Delta2 ->
+    ~ (Var.Map.In x Delta2).
+Proof.
+Admitted.
+(* STOP Easily(?) proven facts *) 
+
+Lemma partitioning : forall (Theta : Var.Map.t nat) Theta0 Theta1 Theta2 Theta3,
+    Var.Map.Partition Theta Theta1 Theta2 ->
+    Var.Map.Partition Theta2 Theta0 Theta3 ->
+    Var.Map.Partition (Var.Map.concat Theta1 Theta0) Theta1 Theta0.
 Proof.
 Admitted.
 
@@ -515,13 +540,6 @@ Lemma csubst_lin : forall G D T C A x v,
     WellTyped G D T C ->
     ~ (Var.Map.In x (ChorEnv.find A D)) ->
     (Choreography.subst A x v C) = C.
-Proof.
-Admitted.
-
-Lemma partitioning : forall (Theta : Var.Map.t nat) Theta0 Theta1 Theta2 Theta3,
-    Var.Map.Partition Theta Theta1 Theta2 ->
-    Var.Map.Partition Theta2 Theta0 Theta3 ->
-    Var.Map.Partition (Var.Map.concat Theta1 Theta0) Theta1 Theta0.
 Proof.
 Admitted.
 
@@ -588,7 +606,8 @@ Proof.
 
           (* prepare witness for choreography C typing *)
           rewrite -> HCasesAeqA'L in H9.
-          rewrite -> (addadd A' T ThetaA3 ThetaA2) in H9.            
+          rewrite -> (addadd1 A' D DeltaA2 x tau) in H9.
+          rewrite -> (addadd2 A' T ThetaA3 ThetaA2) in H9.            
 
             - eapply Send.
 
@@ -601,7 +620,30 @@ Proof.
               + fold Choreography.subst.
                 destruct (Insn.rebound_in A x) eqn:Heq.
                 {
+                  assert (~ (Insn.rebound_in A' x (Insn.Send A' e B' y) = true)).
+                  simpl.
+                  apply (nbeq A' B' x y H7).
+                  rewrite -> HCasesAeqA'L in Heq.
+                  contradiction.
+                }
+                {
+                  pose proof (nin (ChorEnv.find A' (ChorEnv.add A x tau D))
+                                DeltaA1' DeltaA1 DeltaA2 x tau HinDA H10) as Hnin.
+                  pose proof (csubst_lin
+                                (ChorEnv.add B' y tau0 G)
+                                (Actor.Map.add A' DeltaA2 D)
+                                (Actor.Map.add A' ThetaA3 T)
+                                C
+                                A' x v H9) as HCSL.
+                  rewrite -> (find_add A' DeltaA2 D) in HCSL.
+                  specialize (HCSL Hnin).
+                  rewrite <- HCasesAeqA'L in HCSL.
+                  rewrite -> HCSL.
+                  eauto.
+                }
 
+                
+                
 Admitted.
 
     
