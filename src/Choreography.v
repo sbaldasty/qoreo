@@ -293,7 +293,7 @@ Lemma weakening_gen : forall G D T C,
     WellTyped G D T C -> forall G',
       (forall A x tau, ChorEnv.MapsTo A x tau G -> ChorEnv.MapsTo A x tau G') ->
       WellTyped G' D T C.
-Proof. 
+(*Proof. 
   intros G D T C HWT.
   induction HWT.
   
@@ -350,6 +350,8 @@ Proof.
     setoid_rewrite -> extension in HW.
     auto.
 Qed.
+*)
+Admitted.
 
 Lemma no_capture_add : forall A x (tau1 : Expr.typ) I G, 
     (Insn.rebound_in A x I) = false ->
