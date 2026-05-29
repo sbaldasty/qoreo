@@ -492,21 +492,42 @@ Lemma add_empty_delta : forall A x tau (D : ChorEnv.t Expr.typ),
 Proof.
 Admitted.
 
-Lemma chorenv_add_idempotent : forall (D : ChorEnv.t Expr.typ) Delta A x tau,
-    Var.Map.MapsTo x tau Delta ->
-    (ChorEnv.add A x tau (Actor.Map.add A Delta D)) = (Actor.Map.add A Delta D).
-Proof.
-Admitted.
-
 Lemma find_add : forall {X : Type} A M (CE : ChorEnv.t X),
     (ChorEnv.find A (Actor.Map.add A M CE)) = M.
 Proof.
 Admitted.
 
+Lemma find_ab_neq : forall {X : Type} A B x tau (CE : ChorEnv.t X),
+    A <> B ->
+    (ChorEnv.find A (ChorEnv.add B x tau CE)) = (ChorEnv.find A CE).
+Proof.
+Admitted.
+    
 Lemma add_find : forall (CE : ChorEnv.t Expr.typ) A x tau,
     (ChorEnv.find A (ChorEnv.add A x tau CE)) = (Var.Map.add x tau (ChorEnv.find A CE)).
 Proof.
 Admitted.
+
+Lemma add_remove : forall (CE : ChorEnv.t Expr.typ) M A x tau,
+    Var.Map.MapsTo x tau M ->
+    (ChorEnv.add A x tau (Actor.Map.add A (Var.Map.remove x M) CE)) =
+      (Actor.Map.add A M CE).
+Proof.
+Admitted.
+
+Lemma nin_remove : forall (M : Var.Map.t Expr.typ) x,
+    ~ (Var.Map.In x (Var.Map.remove x M)).
+Proof.
+Admitted.
+
+Lemma partition_remove : forall (Delta : Var.Map.t Expr.typ) Delta1 Delta2 x tau,
+    Var.Map.Partition (Var.Map.add x tau Delta) Delta1 Delta2 ->
+    ~ Var.Map.In x Delta ->
+    ~ Var.Map.In x Delta1 ->
+    Var.Map.Partition Delta Delta1 (Var.Map.remove x Delta2).
+Proof.
+Admitted.
+
 
 Lemma addadd1 : forall A (D : ChorEnv.t Expr.typ) Delta x tau,
     (Actor.Map.add A Delta (ChorEnv.add A x tau D)) = (Actor.Map.add A Delta D).
@@ -582,7 +603,7 @@ Proof.
     
   (* Case C = I::C' *) 
   - intros ThetaA1 ThetaA2 tau G D T A x v Hval Hv HC HinT HninG HninD.
-    destruct I as [ A' e B' y | | | | ].
+    destruct I as [ A' e B y | | | | ].
 
     (* Case Send *)
     + inversion HC. subst.
@@ -633,7 +654,7 @@ Proof.
           rewrite -> (add_find D A x tau) in H10.
           pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau HinDA H10) as Hnin.
           pose proof (csubst_lin
-                        (ChorEnv.add B' y tau0 G)
+                        (ChorEnv.add B y tau0 G)
                         (Actor.Map.add A DeltaA2 D)
                         (Actor.Map.add A ThetaA3 T)
                         C
@@ -653,9 +674,9 @@ Proof.
               + fold Choreography.subst.
                 destruct (Insn.rebound_in A x) eqn:Heq.
                 {
-                  assert (~ (Insn.rebound_in A x (Insn.Send A e B' y) = true)).
+                  assert (~ (Insn.rebound_in A x (Insn.Send A e B y) = true)).
                   simpl.
-                  apply (nbeq A B' x y H7).
+                  apply (nbeq A B x y H7).
                   contradiction.
                 }
                 {
@@ -671,6 +692,8 @@ Proof.
         (* case x not in e *)
         {
           destruct HxninDA as [HxninDAA HxninDAB].
+          rewrite -> (add_find D A x tau) in H10.
+          pose proof (ini (ChorEnv.find A D) DeltaA1 DeltaA2 x tau H10 HxninDAA) as Hini.
 
           (* prove main goal in subcases *)
           - eapply Send.
@@ -687,25 +710,23 @@ Proof.
             + fold Choreography.subst.
               destruct (Insn.rebound_in A x) eqn:Heq.
               { 
-                assert (~ (Insn.rebound_in A x (Insn.Send A e B' y) = true)).
+                assert (~ (Insn.rebound_in A x (Insn.Send A e B y) = true)).
                 simpl.
-                apply (nbeq A B' x y H7).
+                apply (nbeq A B x y H7).
                 contradiction.
               }
               {
                 (* specialize and apply IH *)
                 specialize (IHC ThetaA1 ThetaA3 tau
-                              (ChorEnv.add B' y tau0 G)
-                              (Actor.Map.add A DeltaA2 D)
+                              (ChorEnv.add B y tau0 G)
+                              (Actor.Map.add A (Var.Map.remove x DeltaA2) D)
                               (Actor.Map.add A (Var.Map.concat ThetaA1 ThetaA3) T)
                               A x v
                               Hval Hv).
+                rewrite -> (add_remove D DeltaA2 A x tau) in IHC.
                 rewrite -> (addadd2 A T ThetaA3 (Var.Map.concat ThetaA1 ThetaA3)) in IHC.
                 rewrite -> (addadd1 A D DeltaA2 x tau) in H9.
                 rewrite -> (addadd2 A T ThetaA3 ThetaA2) in H9.
-                rewrite -> (add_find D A x tau) in H10.
-                pose proof (ini (ChorEnv.find A D) DeltaA1 DeltaA2 x tau H10 HxninDAA) as Hini.
-                rewrite -> (chorenv_add_idempotent D DeltaA2 A x tau Hini) in IHC.
                 specialize (IHC H9).
                 rewrite -> (find_add A (Var.Map.concat ThetaA1 ThetaA3) T) in IHC.
                 rewrite -> (find_add A ThetaA2 T) in H11.
@@ -714,6 +735,20 @@ Proof.
                   as HPartition.
                 destruct HPartition as [HPartitionA [HPartitionB HPartitionC]].
                 specialize (IHC HPartitionB).
+                rewrite -> (find_ab_neq A B y tau0 G H7) in IHC.
+                specialize (IHC HninG).
+                rewrite -> (find_add A (Var.Map.remove (elt:=Expr.typ) x DeltaA2) D) in IHC.
+                specialize (IHC (nin_remove DeltaA2 x)).
+                eauto.
+                auto.
+              }
+
+            + apply (partition_remove (ChorEnv.find A D) DeltaA1 DeltaA2 x tau H10 HninD HxninDAA).
+
+            + 
+              
+            
+
 Admitted.
 
     
