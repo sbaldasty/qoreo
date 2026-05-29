@@ -617,15 +617,15 @@ Proof.
       (* Case A = A' *)
       {
         rewrite <- HCasesAeqA'L in *.
-                
+        
         assert (HSendety : (exists Theta tau', Expr.WellTyped (ChorEnv.find A G) DeltaA1 Theta e tau')).
         exists ThetaA0.
         exists (Expr.BANG tau0).
         auto.
-
+        
         pose proof
           (esubst_lin (ChorEnv.find A G) DeltaA1 e x v tau HSendety HninG) as HESL.
-
+        
         (* Case x in e *) 
         destruct HESL as [HxinDA | HxninDA].          
         {
@@ -646,11 +646,11 @@ Proof.
           destruct HPartition as [HPartitionA [HPartitionB [HPartitionC HPartitionD]]].
           (* e typing witness. *)
           specialize (HWTS HPartitionA HninG HninDA').
-
+          
           (* prepare witness for choreography C typing *)
           rewrite -> (addadd1 A D DeltaA2 x tau) in H9.
           rewrite -> (addadd2 A T ThetaA3 ThetaA2) in H9.
-
+          
           (* prepare hypotheses for partitioning requirements *)
           rewrite -> (add_find D A x tau) in H10.
           pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau HinDA H10) as Hnin.
@@ -662,43 +662,43 @@ Proof.
                         A x v H9) as HCSL.
           rewrite -> (find_add A DeltaA2 D) in HCSL.
           destruct Hnin as [HninA HninB].
-
+          
           (* prove main goal in subcases *)
           - eapply Send.
-
-              + auto.
-
-              + destruct (Actor.FSet.MF.eq_dec A A) eqn:Heq.
-                { eauto. }
-                { contradiction. }
-                
-              + fold Choreography.subst.
-                destruct (Insn.rebound_in A x) eqn:Heq.
-                {
-                  assert (~ (Insn.rebound_in A x (Insn.Send A e B y) = true)).
-                  simpl.
-                  apply (nbeq A B x y H7).
-                  contradiction.
-                }
-                {
-                  specialize (HCSL HninA).
-                  rewrite -> HCSL.
-                  eauto.
-                }
-                
-              + auto.
-
-              + auto.
+            
+            + auto.
+              
+            + destruct (Actor.FSet.MF.eq_dec A A) eqn:Heq.
+              { eauto. }
+              { contradiction. }
+              
+            + fold Choreography.subst.
+              destruct (Insn.rebound_in A x) eqn:Heq.
+              {
+                assert (~ (Insn.rebound_in A x (Insn.Send A e B y) = true)).
+                simpl.
+                apply (nbeq A B x y H7).
+                contradiction.
+              }
+              {
+                specialize (HCSL HninA).
+                rewrite -> HCSL.
+                eauto.
+              }
+              
+            + auto.
+              
+            + auto.
         }
         (* case x not in e *)
         {
           destruct HxninDA as [HxninDAA HxninDAB].
           rewrite -> (add_find D A x tau) in H10.
           pose proof (ini (ChorEnv.find A D) DeltaA1 DeltaA2 x tau H10 HxninDAA) as Hini.
-
+          
           (* prove main goal in subcases *)
           - eapply Send.
-
+            
             + auto.
               
             + destruct (Actor.FSet.MF.eq_dec A A) eqn:Heq.
@@ -707,7 +707,7 @@ Proof.
                 eauto.
               }
               { auto. }
-
+              
             + fold Choreography.subst.
               destruct (Insn.rebound_in A x) eqn:Heq.
               { 
@@ -743,17 +743,21 @@ Proof.
                 eauto.
                 auto.
               }
-
+              
             + apply (partition_remove (ChorEnv.find A D) DeltaA1 DeltaA2 x tau H10 HninD HxninDAA).
-
+              
             + rewrite -> (find_add A ThetaA2 T) in H11.
               pose proof
                 (partitioning (ChorEnv.find A T) ThetaA0 ThetaA1 ThetaA2 ThetaA3 HinT H11)
                 as HPartition.
               destruct HPartition as [HPartitionA [HPartitionB [HPartitionC HPartitionD]]].
               auto.
-              
-            
+        }
+      }
+      (* Case A <> A' *)
+      {
+        
+        
 
 Admitted.
 
