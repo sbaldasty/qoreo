@@ -564,7 +564,8 @@ Lemma partitioning : forall  {X : Type} (M : Var.Map.t X) M0 M1 M2 M3,
     Var.Map.Partition M2 M0 M3 ->
     Var.Map.Partition (Var.Map.concat M1 M0) M1 M0 /\
       Var.Map.Partition (Var.Map.concat M1 M3) M1 M3 /\      
-      Var.Map.Partition M (Var.Map.concat M1 M0) M3.
+      Var.Map.Partition M (Var.Map.concat M1 M0) M3 /\
+      Var.Map.Partition M M0 (Var.Map.concat M1 M3).
 Proof.
 Admitted.
 
@@ -642,7 +643,7 @@ Proof.
           pose proof
             (partitioning (ChorEnv.find A T) ThetaA0 ThetaA1 ThetaA2 ThetaA3 HinT H11)
             as HPartition.
-          destruct HPartition as [HPartitionA [HPartitionB HPartitionC]].
+          destruct HPartition as [HPartitionA [HPartitionB [HPartitionC HPartitionD]]].
           (* e typing witness. *)
           specialize (HWTS HPartitionA HninG HninDA').
 
@@ -733,7 +734,7 @@ Proof.
                 pose proof
                   (partitioning (ChorEnv.find A T) ThetaA0 ThetaA1 ThetaA2 ThetaA3 HinT H11)
                   as HPartition.
-                destruct HPartition as [HPartitionA [HPartitionB HPartitionC]].
+                destruct HPartition as [HPartitionA [HPartitionB [HPartitionC HPartitionD]]].
                 specialize (IHC HPartitionB).
                 rewrite -> (find_ab_neq A B y tau0 G H7) in IHC.
                 specialize (IHC HninG).
@@ -745,7 +746,12 @@ Proof.
 
             + apply (partition_remove (ChorEnv.find A D) DeltaA1 DeltaA2 x tau H10 HninD HxninDAA).
 
-            + 
+            + rewrite -> (find_add A ThetaA2 T) in H11.
+              pose proof
+                (partitioning (ChorEnv.find A T) ThetaA0 ThetaA1 ThetaA2 ThetaA3 HinT H11)
+                as HPartition.
+              destruct HPartition as [HPartitionA [HPartitionB [HPartitionC HPartitionD]]].
+              auto.
               
             
 
