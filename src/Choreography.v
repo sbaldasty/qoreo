@@ -497,12 +497,25 @@ Lemma find_add : forall {X : Type} A M (CE : ChorEnv.t X),
 Proof.
 Admitted.
 
-Lemma find_ab_neq : forall {X : Type} A B x tau (CE : ChorEnv.t X),
+Lemma find_ab_neq1 : forall {X : Type} A B x tau (CE : ChorEnv.t X),
     A <> B ->
     (ChorEnv.find A (ChorEnv.add B x tau CE)) = (ChorEnv.find A CE).
 Proof.
 Admitted.
-    
+
+Lemma find_ab_neq2 : forall {X : Type} A B M (CE : ChorEnv.t X),
+    A <> B ->
+    (ChorEnv.find A (Actor.Map.add B M CE)) = (ChorEnv.find A CE).
+Proof.
+Admitted.
+
+Lemma find_nbeq : forall (CE : ChorEnv.t Expr.typ) A x B y tau,
+    Insn.bind_eqb (A, x) (B, y) = false -> 
+    ~ Var.Map.In x (ChorEnv.find A CE) ->
+    ~ Var.Map.In x (ChorEnv.find A (ChorEnv.add B y tau CE)).
+Proof.
+Admitted.
+
 Lemma add_find : forall (CE : ChorEnv.t Expr.typ) A x tau,
     (ChorEnv.find A (ChorEnv.add A x tau CE)) = (Var.Map.add x tau (ChorEnv.find A CE)).
 Proof.
@@ -539,6 +552,20 @@ Lemma addadd2 : forall A (T : ChorEnv.t nat) Theta1 Theta2,
 Proof.
 Admitted.
 
+Lemma addadd3 :  forall (CE : ChorEnv.t Expr.typ) A x tau B M,
+  A <> B -> 
+  Actor.Map.add B M (ChorEnv.add A x tau CE) = ChorEnv.add A x tau (Actor.Map.add B M CE).
+Proof.
+Admitted.
+
+Lemma addadd4 :  forall {X : Type} (CE : ChorEnv.t X) A MA B MB,
+  A <> B -> 
+  Actor.Map.add B MB (Actor.Map.add A MA CE) = Actor.Map.add A MA (Actor.Map.add B MB CE).
+Proof.
+Admitted.
+
+(* This Lemma should be equivalent to Insn.nbeq, but annoying technical proof...
+   perhaps should eliminate fancy Insn.bind.eq_dec to simplify? *)
 Lemma nbeq : forall A B x y,
     A <> B -> ~ ((Insn.bind_eqb (A,x) (B,y)) = true).
 Proof.
@@ -566,6 +593,13 @@ Lemma partitioning : forall  {X : Type} (M : Var.Map.t X) M0 M1 M2 M3,
       Var.Map.Partition (Var.Map.concat M1 M3) M1 M3 /\      
       Var.Map.Partition M (Var.Map.concat M1 M0) M3 /\
       Var.Map.Partition M M0 (Var.Map.concat M1 M3).
+Proof.
+Admitted.
+
+Lemma nri_lin : forall G A x tau D T I C G' D' T',
+    WellTyped G (ChorEnv.add A x tau D) T (I::C) ->
+    WellTyped G' (ChorEnv.add A x tau D') T' C ->
+    ~(Insn.rebound_in A x I = true).
 Proof.
 Admitted.
 
@@ -604,7 +638,7 @@ Proof.
     
   (* Case C = I::C' *) 
   - intros ThetaA1 ThetaA2 tau G D T A x v Hval Hv HC HinT HninG HninD.
-    destruct I as [ A' e B y | | | | ].
+    destruct I as [ A' e B y | A' y B z | | | ].
 
     (* Case Send *)
     + inversion HC. subst.
@@ -677,7 +711,7 @@ Proof.
               {
                 assert (~ (Insn.rebound_in A x (Insn.Send A e B y) = true)).
                 simpl.
-                apply (nbeq A B x y H7).
+                eapply (nbeq A B x y H7).
                 contradiction.
               }
               {
@@ -709,7 +743,7 @@ Proof.
               { auto. }
               
             + fold Choreography.subst.
-              destruct (Insn.rebound_in A x) eqn:Heq.
+              destruct (Insn.rebound_in A x (Insn.Send A e B y)) eqn:Heq.
               { 
                 assert (~ (Insn.rebound_in A x (Insn.Send A e B y) = true)).
                 simpl.
@@ -736,7 +770,7 @@ Proof.
                   as HPartition.
                 destruct HPartition as [HPartitionA [HPartitionB [HPartitionC HPartitionD]]].
                 specialize (IHC HPartitionB).
-                rewrite -> (find_ab_neq A B y tau0 G H7) in IHC.
+                rewrite -> (find_ab_neq1 A B y tau0 G H7) in IHC.
                 specialize (IHC HninG).
                 rewrite -> (find_add A (Var.Map.remove (elt:=Expr.typ) x DeltaA2) D) in IHC.
                 specialize (IHC (nin_remove DeltaA2 x)).
@@ -756,9 +790,50 @@ Proof.
       }
       (* Case A <> A' *)
       {
-        
-        
+        - eapply Send.
 
+          + auto.
+
+          + destruct (Actor.FSet.MF.eq_dec A A') eqn:Heq.
+            { contradiction. }
+            { eauto. }
+
+          + fold Choreography.subst.          
+            rewrite -> (addadd3 D A x tau A' DeltaA2) in H9; auto.
+            
+            destruct (Insn.rebound_in A x (Insn.Send A' e B y)) eqn:Heq.
+            {
+              pose proof (nri_lin G A x tau D (Actor.Map.add A ThetaA2 T) (Insn.Send A' e B y) C
+                            (ChorEnv.add B y tau0 G)
+                            (Actor.Map.add A' DeltaA2 D)
+                            (Actor.Map.add A' ThetaA3 (Actor.Map.add A ThetaA2 T))
+                            HC H9) as Hnri.
+              contradiction.
+            }
+            {
+              (* specialize and apply IH *)
+              rewrite -> (addadd4 T A ThetaA2 A' ThetaA3 HCasesAeqA'R) in H9.
+              specialize (IHC ThetaA1 ThetaA2 tau
+                            (ChorEnv.add B y tau0 G)
+                            (Actor.Map.add A' DeltaA2 D)
+                            (Actor.Map.add A' ThetaA3 T)
+                            A x v Hval Hv H9).
+              rewrite -> (find_ab_neq2 A A' ThetaA3 T HCasesAeqA'R) in IHC.
+              rewrite -> (find_ab_neq2 A A' DeltaA2 D HCasesAeqA'R) in IHC.
+              simpl in Heq.
+              pose proof (find_nbeq G A x B y tau0 Heq HninG) as HninG'.
+              eapply (IHC HinT HninG' HninD).
+            }
+
+          + rewrite -> (find_ab_neq1 A' A x tau D) in H10; auto.
+
+          + rewrite -> (find_ab_neq2 A' A ThetaA2 T) in H11; auto.
+      }
+
+    (* Case EPR *)
+    + inversion HC. subst.
+      
+                            
 Admitted.
 
     
