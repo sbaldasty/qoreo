@@ -1000,7 +1000,37 @@ Proof.
             + auto.
               
             + auto.
+
+            + auto.
+        }
+        (* case x not in e *)
+        {
+          destruct HxninDA as [HxninDAA HxninDAB].
+          rewrite -> (add_find D A x tau) in H8.
+          pose proof (ini (ChorEnv.find A D) DeltaA1 DeltaA2 x tau H8 HxninDAA) as Hini.
           
+          (* prove main goal in subcases *)
+          - eapply LetIn.
+            
+            + destruct (Actor.FSet.MF.eq_dec A A) eqn:Heq.
+              {
+                rewrite -> HxninDAB.
+                eauto.
+              }
+              { auto. }
+
+            + fold Choreography.subst.
+              destruct (Insn.rebound_in A x (Insn.Let A y e)) eqn:Heq.
+              {
+                (* ALERT: this shows that linear variables can be classically rebound *)
+                rewrite -> (addadd1 A D (Var.Map.add y tau0 DeltaA2) x tau) in H7.
+                rewrite -> (addadd2 A T ThetaA3 ThetaA2) in H7.
+                eauto.
+              }
+              {
+                
+              }
+               
 Admitted.
 
     
