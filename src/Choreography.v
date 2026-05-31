@@ -100,7 +100,7 @@ Module Choreography.
       | [] => []
       | (Ins :: C') => (Insn.subst A x v Ins)::(if (Insn.rebound_in A x Ins)
                                                 then C' else (subst A x v C')) 
-      end. 
+      end.
 
     (* Fixpoint subst (A : Actor.t) (x : Var.t) (v : Expr.t) (C : t) : t :=
       match C with
