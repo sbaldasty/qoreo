@@ -511,6 +511,11 @@ Lemma nin_dj : forall  {X : Type} x (M1 : Var.Map.t X) M2,
     ~ Var.Map.In x M1.
 Proof.
 Admitted.
+
+Lemma partitionm_refl : forall {X : Type} (M : Var.Map.t X) M1 M2,
+    Var.Map.Partition M M1 M2 -> Var.Map.Partition M M2 M1.
+Proof.
+Admitted.
     
 Lemma add_empty_delta : forall A x tau (D : ChorEnv.t Expr.typ),
     ~ Actor.Map.Empty (ChorEnv.add A x tau D).
@@ -614,6 +619,12 @@ Lemma addadd7 :  forall (CE : ChorEnv.t Expr.typ) A x tau1 y tau2 M,
     x <> y -> 
     Actor.Map.add A (Var.Map.add y tau2 M) (ChorEnv.add A x tau1 CE) =
       ChorEnv.add A x tau1 (Actor.Map.add A (Var.Map.add y tau2 M) CE).
+Proof.
+Admitted.
+
+Lemma addadd8 :  forall (CE : ChorEnv.t Expr.typ) A x tau M, 
+    Actor.Map.add A (Var.Map.add x tau M) CE =
+      ChorEnv.add A x tau (Actor.Map.add A M CE).
 Proof.
 Admitted.
 
@@ -864,6 +875,13 @@ Proof.
           destruct HxninDA as [HxninDAA HxninDAB].
           rewrite -> (add_find D A x tau) in H10.
           pose proof (ini (ChorEnv.find A D) DeltaA1 DeltaA2 x tau H10 HxninDAA) as Hini.
+
+          (* partioning facts *)
+          rewrite -> (find_add A ThetaA2 T) in H11.
+          pose proof
+            (partitioning (ChorEnv.find A T) ThetaA0 ThetaA1 ThetaA2 ThetaA3 HinT H11)
+            as HPartition.
+          destruct HPartition as [HPartitionA [HPartitionB [HPartitionC HPartitionD]]].
           
           (* prove main goal in subcases *)
           - eapply Send.
@@ -899,11 +917,6 @@ Proof.
                 rewrite -> (addadd2 A T ThetaA3 ThetaA2) in H9.
                 specialize (IHC H9).
                 rewrite -> (find_add A (Var.Map.concat ThetaA1 ThetaA3) T) in IHC.
-                rewrite -> (find_add A ThetaA2 T) in H11.
-                pose proof
-                  (partitioning (ChorEnv.find A T) ThetaA0 ThetaA1 ThetaA2 ThetaA3 HinT H11)
-                  as HPartition.
-                destruct HPartition as [HPartitionA [HPartitionB [HPartitionC HPartitionD]]].
                 specialize (IHC HPartitionB).
                 rewrite -> (find_ab_neq1 A B y tau0 G H7) in IHC.
                 specialize (IHC HninG).
@@ -915,12 +928,7 @@ Proof.
               
             + apply (partition_remove (ChorEnv.find A D) DeltaA1 DeltaA2 x tau H10 HninD HxninDAA).
               
-            + rewrite -> (find_add A ThetaA2 T) in H11.
-              pose proof
-                (partitioning (ChorEnv.find A T) ThetaA0 ThetaA1 ThetaA2 ThetaA3 HinT H11)
-                as HPartition.
-              destruct HPartition as [HPartitionA [HPartitionB [HPartitionC HPartitionD]]].
-              auto.
+            + auto.
         }
       }
       (* Case A <> A' *)
@@ -1313,6 +1321,19 @@ Proof.
           destruct HxninDA as [HxninDAA HxninDAB].
           rewrite -> (add_find D A x tau) in H8.
           pose proof (ini (ChorEnv.find A D) DeltaA1 DeltaA2 x tau H8 HxninDAA) as Hini.
+
+          
+          (* (de)construct environment for typing C *)
+          pose proof (mapsto_destruct x tau DeltaA2 Hini) as HDA2.
+          destruct HDA2 as [DeltaA2'].
+          destruct H as [HDA2A HDA2B].
+          
+          (* partioning facts. *)
+          rewrite -> (find_add A ThetaA2 T) in H9.
+          pose proof
+            (partitioning (ChorEnv.find A T) ThetaA0 ThetaA1 ThetaA2 ThetaA3 HinT H9)
+            as HPartition.
+          destruct HPartition as [HPartitionA [HPartitionB [HPartitionC HPartitionD]]].
           
           (* prove main goal in subcases *)
           - eapply LetBang.
@@ -1347,8 +1368,60 @@ Proof.
                 pose proof (in_beq G A x tau0) as Hcontra2.
                 contradiction.
               }
-              { 
+              {          
+                rewrite -> HDA2A in H7.
+                rewrite -> (addadd8 D A x tau DeltaA2') in H7.
+
+                (* specialize and apply IH *)
+                specialize (IHC ThetaA1 ThetaA3 tau
+                              (ChorEnv.add A' y tau0 G)
+                              (Actor.Map.add A DeltaA2' D)
+                              (Actor.Map.add A (Var.Map.concat ThetaA1 ThetaA3) T)
+                              A x v
+                              Hval Hv).
+
+                rewrite <- HCasesAeqA'L in IHC.
+                rewrite -> (addadd2 A T ThetaA3 (Var.Map.concat ThetaA1 ThetaA3)) in IHC.
+                rewrite -> (find_add A (Var.Map.concat ThetaA1 ThetaA3) T) in IHC.
+                rewrite -> (find_add A DeltaA2' D) in IHC.
+                pose proof (nin_nbeq_add1 G A x A y tau0 Heq HninG) as HninGy.
                 
+                specialize (IHC H7 HPartitionB HninGy HDA2B).
+
+                eauto.
+              }
+
+            +  assert (Var.Map.add x tau DeltaA2' = DeltaA2) as Hdel; auto.
+               pose proof (partitionm_refl (Var.Map.add x tau (ChorEnv.find A D)) DeltaA1 DeltaA2 H8) as Hpart.
+               pose proof (nin (ChorEnv.find A D) DeltaA2' DeltaA2 DeltaA1 x tau Hdel Hpart) as Hnin.
+               destruct Hnin as [HninA HninB].
+               pose proof (partitionm_refl (ChorEnv.find A D) DeltaA2' DeltaA1 HninB).
+               auto.
+
+            + auto.
+        }
+      }
+      (* Case A <> A' *)
+      {
+        - eapply LetBang.
+          
+          + destruct (Actor.FSet.MF.eq_dec A A') eqn:Heq.
+            { contradiction. }
+            { eauto. } 
+            
+          + fold Choreography.subst.
+            destruct (Insn.rebound_in A x (Insn.Let A' y e)) eqn:Heq.
+            {
+              unfold Insn.rebound_in in Heq.
+              pose proof (beq A A' x y).
+              destruct H.
+              specialize (H Heq).
+              destruct H.
+              contradiction.
+            }
+      
+                              
+               
 Admitted.
 
     
