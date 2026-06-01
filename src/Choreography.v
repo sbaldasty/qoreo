@@ -754,7 +754,7 @@ Proof.
     
   (* Case C = I::C' *) 
   - intros ThetaA1 ThetaA2 tau G D T A x v Hval Hv HC HinT HninG HninD.
-    destruct I as [ A' e B y | A' y B z | A' y e | | ].
+    destruct I as [ A' e B y | A' y B z | A' y e | A' y e | ].
 
     (* Case Send *)
     + inversion HC. subst.
@@ -768,7 +768,8 @@ Proof.
       {
         rewrite <- HCasesAeqA'L in *.
         
-        assert (HSendety : (exists Theta tau', Expr.WellTyped (ChorEnv.find A G) DeltaA1 Theta e tau')).
+        assert (HSendety : (exists Theta tau', Expr.WellTyped (ChorEnv.find A G)
+                                                 DeltaA1 Theta e tau')).
         exists ThetaA0.
         exists (Expr.BANG tau0).
         auto.
@@ -954,7 +955,8 @@ Proof.
       rewrite -> (addadd5 (ChorEnv.add A' y Expr.QUBIT D) B z Expr.QUBIT A x tau HninAB) in H8.
       
       pose proof (nin_nbeq_add1 D A x A' y Expr.QUBIT HninAA' HninD) as HaddAA'.
-      pose proof (nin_nbeq_add1 (ChorEnv.add A' y Expr.QUBIT D) A x B z Expr.QUBIT HninAB HaddAA') as HaddAB.
+      pose proof (nin_nbeq_add1 (ChorEnv.add A' y Expr.QUBIT D) A x B z
+                    Expr.QUBIT HninAB HaddAA') as HaddAB.
 
       (* specialize and apply IH *)
       specialize (IHC ThetaA1 ThetaA2 tau G
@@ -1208,9 +1210,58 @@ Proof.
             + auto.
       }
 
-    + 
- 
+    + inversion HC; subst.
+
+      
+
+      assert (A = A' \/ A <> A') as HCasesAeqA'.
+      tauto.
+
+      destruct HCasesAeqA' as [HCasesAeqA'L | HCasesAeqA'R].
+
+      (* Case A = A' *)
+      {
+        rewrite <- HCasesAeqA'L in *.
+        
+        assert (HSendety : (exists Theta tau', Expr.WellTyped (ChorEnv.find A G)
+                                                 DeltaA1 Theta e tau')).
+        exists ThetaA0.
+        exists (Expr.BANG tau0).
+        auto.
+        
+        pose proof
+          (esubst_lin (ChorEnv.find A G) DeltaA1 e x v tau HSendety HninG) as HESL.
+        
+        (* Case x in e *) 
+        destruct HESL as [HxinDA | HxninDA].          
+        {
+          admit.
+        }
+        (* case x not in e *)
+        {
+          destruct HxninDA as [HxninDAA HxninDAB].
+          rewrite -> (add_find D A x tau) in H8.
+          pose proof (ini (ChorEnv.find A D) DeltaA1 DeltaA2 x tau H8 HxninDAA) as Hini.
+          
+          (* prove main goal in subcases *)
+          - eapply LetBang.
+            
+            + destruct (Actor.FSet.MF.eq_dec A A) eqn:Heq.
+              {
+                rewrite -> HxninDAB.
+                eauto.
+              }
+              { auto. }
               
+            + fold Choreography.subst.
+              destruct (Insn.rebound_in A x (Insn.LetBang A y e)) eqn:Heq.
+              {
+                unfold Insn.rebound_in in Heq.
+                pose proof (beqeq A x y Heq).
+                rewrite <- H in *.
+              }
+        
+      
 Admitted.
 
     
