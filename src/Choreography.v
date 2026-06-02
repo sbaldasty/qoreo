@@ -783,7 +783,7 @@ Proof.
     
   (* Case C = I::C' *) 
   - intros ThetaA1 ThetaA2 tau G D T A x v Hval Hv HC HinT HninG HninD.
-    destruct I as [ A' e B y | A' y B z | A' y e | A' y e | ].
+    destruct I as [ A' e B y | A' y B z | A' y e | A' y e | A' y z e ].
 
     (* Case Send *)
     + inversion HC. subst.
@@ -1449,7 +1449,94 @@ Proof.
       }
 
       (* Case LetPair *)
-    + 
+    + inversion HC; subst.
+
+      assert (A = A' \/ A <> A') as HCasesAeqA'.
+      tauto.
+
+      destruct HCasesAeqA' as [HCasesAeqA'L | HCasesAeqA'R].
+
+      (* Case A = A' *)
+      {
+        rewrite <- HCasesAeqA'L in *.
+
+        rewrite -> (addadd1 A D (Var.Map.add y tau1 (Var.Map.add z tau2 DeltaA2)) x tau) in H8.
+        rewrite -> (addadd2 A T ThetaA3 ThetaA2) in H8.
+        
+        assert (HSendety : (exists Theta tau', Expr.WellTyped (ChorEnv.find A G)
+                                                 DeltaA1 Theta e tau')).
+        exists ThetaA0.
+        exists (Expr.Tensor tau1 tau2).
+        auto. 
+        
+        pose proof
+          (esubst_lin (ChorEnv.find A G) DeltaA1 e x v tau HSendety HninG) as HESL.
+
+        (* Case x in e *) 
+        destruct HESL as [HxinDA | HxninDA].          
+        {
+          (* prepare witness for expression e typing and partioning facts. *)
+          destruct HxinDA as [DeltaA1'].
+          destruct H as [HinDA HninDA'].
+          rewrite <- HinDA in H4.
+          pose proof
+            (Expr.wt_subst e ThetaA1 ThetaA0 tau (ChorEnv.find A G) DeltaA1'
+               (Var.Map.concat ThetaA1 ThetaA0) x v (Expr.Tensor tau1 tau2)
+               Hval Hv H4) as HWTS.
+          pose proof (find_add A ThetaA2 T) as HFA.
+          rewrite -> HFA in H10.
+          (* partioning facts. *)
+          pose proof
+            (partitioning (ChorEnv.find A T) ThetaA0 ThetaA1 ThetaA2 ThetaA3 HinT H10)
+            as HPartition.
+          destruct HPartition as [HPartitionA [HPartitionB [HPartitionC HPartitionD]]].
+          (* e typing witness. *)
+          specialize (HWTS HPartitionA HninG HninDA').
+
+          (* (* prepare witness for choreography C typing *)
+          rewrite -> (addadd1 A D (Var.Map.add y tau0 DeltaA2) x tau) in H7. 
+          rewrite -> (addadd2 A T ThetaA3 ThetaA2) in H7. *)
+
+          (* prepare hypotheses for partitioning requirements *)
+          rewrite -> (add_find D A x tau) in H9.
+          pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau HinDA H9) as Hnin.
+          pose proof (csubst_lin
+                        G
+                        (Actor.Map.add A (Var.Map.add y tau1 (Var.Map.add z tau2 DeltaA2)) D)
+                        (Actor.Map.add A ThetaA3 T)
+                        C
+                        A x v H8) as HCSL.
+          rewrite -> (find_add A (Var.Map.add y tau1 (Var.Map.add z tau2 DeltaA2)) D) in HCSL.
+          destruct Hnin as [HninA HninB].
+
+          (* prove main goal in subcases *)
+          - eapply LetPair.
+            
+            + destruct (Actor.FSet.MF.eq_dec A A) eqn:Heq.
+              { eauto. }
+              { contradiction. }
+              
+            + fold Choreography.subst.
+              destruct (Insn.rebound_in A x) eqn:Heq.
+              {
+                eauto.
+              }
+              {
+                unfold Insn.rebound_in in Heq.
+                assert (Insn.bind_eqb (A, x) (A, z) = false).
+                
+                pose proof (nin_mapl DeltaA2 x z tau2 (nbeqeq A x z Heq) HninA) as Hninz.
+                specialize (HCSL (nin_mapl DeltaA2 x y tau0 (nbeqeq A x y Heq) HninA)).
+                rewrite -> HCSL.
+                eauto.
+              }
+              
+            + auto.
+              
+            + auto.
+
+            + auto.
+        }
                
 Admitted.
 
