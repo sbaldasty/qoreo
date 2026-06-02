@@ -5,6 +5,7 @@ From Stdlib Require Import Structures.Equalities.
 From Stdlib Require Import Program.Equality.
 From Stdlib Require Import Logic.
 From Stdlib Require Import Logic.Decidable.
+From Stdlib Require Import Bool.Bool.
 
 Module Insn.
     Inductive t : Type :=
@@ -1523,16 +1524,22 @@ Proof.
               }
               {
                 unfold Insn.rebound_in in Heq.
-                assert (Insn.bind_eqb (A, x) (A, z) = false).
+
+                (* NOTE: nice boolean eq rewrite Lemma from Bool.Bool *)
+                rewrite orb_false_iff in Heq.
+                destruct Heq as [HeqA HeqB].
                 
-                pose proof (nin_mapl DeltaA2 x z tau2 (nbeqeq A x z Heq) HninA) as Hninz.
-                specialize (HCSL (nin_mapl DeltaA2 x y tau0 (nbeqeq A x y Heq) HninA)).
+                pose proof (nin_mapl DeltaA2 x z tau2 (nbeqeq A x z HeqB) HninA) as Hninz.
+                specialize (HCSL (nin_mapl (Var.Map.add z tau2 DeltaA2)
+                                    x y tau1 (nbeqeq A x y HeqA) Hninz)).
                 rewrite -> HCSL.
                 eauto.
               }
               
             + auto.
               
+            + auto.
+
             + auto.
 
             + auto.
