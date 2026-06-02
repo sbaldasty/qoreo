@@ -57,12 +57,20 @@ Module Insn.
 
     Definition bind_eq  (Ax : bindt) (By: bindt) : Prop := (fst Ax) = (fst By) /\ (snd Ax) = (snd By).
 
+    Lemma beq : forall Ax By, (bind_eq Ax By) <-> ((fst Ax) = (fst By) /\ (snd Ax) = (snd By)).
+      Proof.
+        intros.
+        split.
+        { intros. unfold bind_eq in H. auto. }
+        { intros. unfold bind_eq. auto. }
+      Qed.
+        
     Lemma nbeq : forall Ax By, ((fst Ax) <> (fst By) \/ (snd Ax) <> (snd By)) -> ~(bind_eq Ax By).
     Proof.
       intros. unfold bind_eq. tauto.
     Qed.
 
-    Lemma bind_eq_reflexive : forall Ax By, bind_eq Ax By -> bind_eq By Ax.
+    Lemma bind_eq_symmetric : forall Ax By, bind_eq Ax By -> bind_eq By Ax.
     Proof.
       intros (A,x) (B,y) H.
       unfold bind_eq.
@@ -76,21 +84,53 @@ Module Insn.
       | (right pt1, _) => right (nbeq Ax By (or_introl pt1))
       | (_, right pt2) => right (nbeq Ax By (or_intror pt2))
       end.
-    
+
+    (* Unwieldy but leaving as advanced technical example. *)
+    (* Definition bind_eqb (Ax : bindt) (By: bindt) : bool :=
+       match (bool_of_sumbool (bind_eq_dec Ax By)) with
+       | exist _ x _ => x
+       end. *)
+
     Definition bind_eqb (Ax : bindt) (By: bindt) : bool :=
-      match (bool_of_sumbool (bind_eq_dec Ax By)) with
-      | exist _ x _ => x
-      end.
-    
-    Lemma bind_eqb_reflexive : forall Ax By, bind_eqb Ax By = bind_eqb By Ax.
+      if (bind_eq_dec Ax By) then true else false.
+
+    Lemma bind_eqb_true : forall Ax By, 
+      bind_eqb Ax By = true <-> bind_eq Ax By.
     Proof.
-      intros (A,x) (B,y).
+      intros.
+      split.
+      {
+        intros.
+        pose proof (beq Ax By) as Hbeq.
+        destruct Hbeq as [HbeqA HbeqB].
+        apply HbeqB.
+        unfold bind_eqb in H.
+        (* NOTE destruction of dependent type with desired spec! *)
+        destruct (bind_eq_dec Ax By) in H.
+        {
+          specialize (HbeqA b).
+          auto.
+        }
+        { discriminate. }
+      }
+      {
+        intros.
+        unfold bind_eqb.
+        destruct (bind_eq_dec Ax By).
+        { reflexivity. }
+        { contradiction. }
+      }
+    Qed.
+
+    Lemma bind_eqb_symmetric : forall Ax By, bind_eqb Ax By = bind_eqb By Ax.
+    Proof.
+      intros (A,x) (B,y).  
       destruct (bind_eqb (A, x) (B, y)) eqn:H0.
       unfold bind_eqb.
       destruct bool_of_sumbool.
-      pose proof (bind_eq_reflexive (B, y) (A, x)) as Heqr.
+      pose proof (bind_eq_symmetric (B, y) (A, x)) as Heqr.
       (* Seems like the following should work, but it breaks. *)
-      (* rewrite -> Heqr in y0. *)
+      (* rewrite -> Heqr in y0.  *)
     Admitted.
     
     Definition rebound_in (A : Actor.t) (x : Var.t) (I : t) : bool :=
@@ -681,6 +721,14 @@ Lemma nin_nbeq : forall (CE : ChorEnv.t Expr.typ) A x tau B y,
     Insn.bind_eqb (A, x) (B, y) = false.
 Proof.
 Admitted.
+      
+
+Lemma  contra_nin_nbeq : forall (CE : ChorEnv.t Expr.typ) A x tau B y,
+    Insn.bind_eqb (A, x) (B, y) = true ->
+    Var.Map.In y (ChorEnv.find B (ChorEnv.add A x tau CE)).
+Proof.
+  intros.  
+Admitted.
 
 (* this follows by contraposition of nin_nbeq, atm I am not sure how to
    prove contrapositive. *)          
@@ -1010,11 +1058,11 @@ Proof.
 
       auto.
       
-      setoid_rewrite <- (Insn.bind_eqb_reflexive (A', y) (A, x)) in HninAA'.
+      setoid_rewrite <- (Insn.bind_eqb_symmetric (A', y) (A, x)) in HninAA'.
       apply (nin_nbeq_add2 D A' y A x tau HninAA') in H9.
       auto.
       
-      setoid_rewrite <- (Insn.bind_eqb_reflexive (B, z) (A, x)) in HninAB.
+      setoid_rewrite <- (Insn.bind_eqb_symmetric (B, z) (A, x)) in HninAB.
       apply (nin_nbeq_add2 D B z A x tau HninAB) in H10.
       auto.
 
@@ -1494,10 +1542,6 @@ Proof.
           (* e typing witness. *)
           specialize (HWTS HPartitionA HninG HninDA').
 
-          (* (* prepare witness for choreography C typing *)
-          rewrite -> (addadd1 A D (Var.Map.add y tau0 DeltaA2) x tau) in H7. 
-          rewrite -> (addadd2 A T ThetaA3 ThetaA2) in H7. *)
-
           (* prepare hypotheses for partitioning requirements *)
           rewrite -> (add_find D A x tau) in H9.
           pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau HinDA H9) as Hnin.
@@ -1544,6 +1588,50 @@ Proof.
 
             + auto.
         }
+        (* case x not in e *)
+        {
+          destruct HxninDA as [HxninDAA HxninDAB].
+          rewrite -> (add_find D A x tau) in H9.
+          pose proof (ini (ChorEnv.find A D) DeltaA1 DeltaA2 x tau H9 HxninDAA) as Hini.
+
+          (* (de)construct environment for typing C *)
+          pose proof (mapsto_destruct x tau DeltaA2 Hini) as HDA2.
+          destruct HDA2 as [DeltaA2'].
+          destruct H as [HDA2A HDA2B].
+
+          (* partioning facts. *)
+          rewrite -> (find_add A ThetaA2 T) in H10.
+          pose proof
+            (partitioning (ChorEnv.find A T) ThetaA0 ThetaA1 ThetaA2 ThetaA3 HinT H10) 
+            as HPartition.                
+          destruct HPartition as [HPartitionA [HPartitionB [HPartitionC HPartitionD]]].
+          
+          (* prove main goal in subcases *)
+          - eapply LetPair.
+            
+            + destruct (Actor.FSet.MF.eq_dec A A) eqn:Heq.
+              {
+                rewrite -> HxninDAB.
+                eauto.
+              }
+              { auto. }
+
+            + fold Choreography.subst.
+              destruct (Insn.rebound_in A x (Insn.LetPair A y z e)) eqn:Heq.
+              (* impossible case x = y *)
+              {
+                Check beqeq.
+                Check map_in.
+                unfold Insn.rebound_in in Heq.
+
+                (* NOTE: nice boolean eq rewrite Lemma from Bool.Bool *)
+                rewrite orb_true_iff in Heq.
+                destruct Heq as [HeqA HeqB].
+                
+                pose proof (beqeq A x y Heq).
+                pose proof (map_in DeltaA2 x tau Hini).
+                rewrite <- H in H11.
+                contradiction.
                
 Admitted.
 
