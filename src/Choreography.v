@@ -771,33 +771,33 @@ Proof.
     inversion HWT; subst.
     apply Nil; auto.
 
-  - destruct I as [ A' e B y | A' y B z | A' y e | A' y e | A' y z e ].
+  - destruct I as [ A e B y | A y B z | A y e | A y e | A y z e ].
 
     (* Case Send *)
     + intros G D T G0 HWT G' HE.
       inversion HWT; subst.
 
-      destruct (HE A') as [HEA HEB].
+      destruct (HE A) as [HEA HEB].
 
       pose proof (partition_dj
-                    (ChorEnv.find A' G0) (ChorEnv.find A' D) DeltaA1 DeltaA2 HEB H10) as HPDJ.
+                    (ChorEnv.find A G0) (ChorEnv.find A D) DeltaA1 DeltaA2 HEB H10) as HPDJ.
       
       pose proof (Expr.weakening_gen
-                    (ChorEnv.find A' G0) (ChorEnv.find A' G)
-                    DeltaA1 ThetaA1 e (Expr.BANG tau) H8 (ChorEnv.find A' G') HEA HPDJ) as HEWG.
+                    (ChorEnv.find A G0) (ChorEnv.find A G)
+                    DeltaA1 ThetaA1 e (Expr.BANG tau) H8 (ChorEnv.find A G') HEA HPDJ) as HEWG.
 
       eapply Send.     
       { auto. } 
       { eapply HEWG. }
       { 
         apply (IHC
-                 (ChorEnv.add B y tau G) (Actor.Map.add A' DeltaA2 D)
-                 (Actor.Map.add A' ThetaA2 T) G0 H9 (ChorEnv.add B y tau G')).       
+                 (ChorEnv.add B y tau G) (Actor.Map.add A DeltaA2 D)
+                 (Actor.Map.add A ThetaA2 T) G0 H9 (ChorEnv.add B y tau G')).       
         intros A0.
         destruct (HE A0) as [HEA0A HEA0B].
         split.
         { apply (map_subset_add A0 B y tau G' G (ChorEnv.find A0 G0) HEA0A). }
-        { apply (partition_dj_env A0 A' G0 D DeltaA1 DeltaA2 HEA0B H10). }
+        { apply (partition_dj_env A0 A G0 D DeltaA1 DeltaA2 HEA0B H10). }
       }
       { auto. }
       { auto. }
@@ -809,32 +809,102 @@ Proof.
       eapply EPR.
       { auto. }
       { 
-        apply (IHC (CE_remove B z (CE_remove A' y G))
-                 (ChorEnv.add B z Expr.QUBIT (ChorEnv.add A' y Expr.QUBIT D))
-                 T (CE_remove B z (CE_remove A' y G0)) H8
-                 (CE_remove B z (CE_remove A' y G'))).
+        apply (IHC (CE_remove B z (CE_remove A y G))
+                 (ChorEnv.add B z Expr.QUBIT (ChorEnv.add A y Expr.QUBIT D))
+                 T (CE_remove B z (CE_remove A y G0)) H8
+                 (CE_remove B z (CE_remove A y G'))).
         intros A0.
         destruct (HE A0) as [HEA0A HEA0B].
         split.
         { 
-          pose proof (partition_remove_all G' G G0 A0 A' y HEA0A) as HEA0Ay.
+          pose proof (partition_remove_all G' G G0 A0 A y HEA0A) as HEA0Ay.
           apply (partition_remove_all
-                   (CE_remove A' y G')
-                   (CE_remove A' y G)
-                   (CE_remove A' y G0)
+                   (CE_remove A y G')
+                   (CE_remove A y G)
+                   (CE_remove A y G0)
                    A0 B z HEA0Ay).
         }
         {
-          pose proof (remove_add_dj_env G0 D A0 A' y (Expr.QUBIT) HEA0B) as HEA0By.
-          apply (remove_add_dj_env (CE_remove A' y G0) (ChorEnv.add A' y Expr.QUBIT D)
+          pose proof (remove_add_dj_env G0 D A0 A y (Expr.QUBIT) HEA0B) as HEA0By.
+          apply (remove_add_dj_env (CE_remove A y G0) (ChorEnv.add A y Expr.QUBIT D)
                    A0 B z (Expr.QUBIT) HEA0By).
         }
       }
       { auto. }
       { auto. }
 
-    + 
-        HERE
+    + intros G D T G0 HWT G' HE.
+      inversion HWT; subst.
+
+      eapply LetIn.
+      { 
+        destruct (HE A) as [HEAA HEAB].
+
+        pose proof (partition_dj (ChorEnv.find A G0) (ChorEnv.find A D)
+                      DeltaA1 DeltaA2 HEAB H8) as Hpdj.            
+        
+        eapply (Expr.weakening_gen
+                  (ChorEnv.find A G0)
+                  (ChorEnv.find A G)
+                  DeltaA1 ThetaA1 e tau H3
+                  (ChorEnv.find A G')
+                  HEAA Hpdj).
+      }
+      {
+        eapply (IHC (CE_remove A y G)
+                      (Actor.Map.add A (Var.Map.add y tau DeltaA2) D) (* (ChorEnv.add A y tau D) *)
+                      (Actor.Map.add A ThetaA2 T)
+                      (CE_remove A y G0) H7
+                      (CE_remove A y G')).
+
+        intros A0.
+        destruct (HE A0) as [HEA0A HEA0B].
+        split.
+        { apply (partition_remove_all G' G G0 A0 A y HEA0A). }
+        { 
+          pose proof (partition_dj_env A0 A G0 D DeltaA1 DeltaA2 HEA0B H8) as Hpdje. 
+          rewrite -> (addadd8 D A y tau DeltaA2).
+          pose proof (remove_add_dj_env G0 (Actor.Map.add A DeltaA2 D) A0 A y tau Hpdje).
+          auto.
+        }
+      }
+      { auto. }
+      { auto. }
+      { auto. }
+
+    (* Case LetBang *)
+    + intros G D T G0 HWT G' HE.
+      inversion HWT; subst.
+
+      destruct (HE A) as [HEA HEB].
+
+      Check partition_dj.
+
+      pose proof (partition_dj
+                    (ChorEnv.find A G0) (ChorEnv.find A D) DeltaA1 DeltaA2 HEB H8) as HPDJ.
+      
+      pose proof (Expr.weakening_gen
+                    (ChorEnv.find A G0) (ChorEnv.find A G)
+                    DeltaA1 ThetaA1 e (Expr.BANG tau) H6 (ChorEnv.find A G') HEA HPDJ) as HEWG.
+
+      eapply LetBang.     
+      { eauto. } 
+      { 
+        apply (IHC
+                 (ChorEnv.add A y tau G) (Actor.Map.add A DeltaA2 D)
+                 (Actor.Map.add A ThetaA2 T) G0 H7 (ChorEnv.add A y tau G')).       
+        intros A0.
+        destruct (HE A0) as [HEA0A HEA0B].
+        split.
+        { apply (map_subset_add A0 A y tau G' G (ChorEnv.find A0 G0) HEA0A). }
+        { apply (partition_dj_env A0 A G0 D DeltaA1 DeltaA2 HEA0B H8). }
+      }
+      { auto. }
+      { auto. }
+
+    (* Case LetPair *)
+    +
+          XXX  
 
         
 Lemma weakening_gen' : forall G D T C,
