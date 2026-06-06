@@ -457,6 +457,15 @@ Qed.
 
 (* START Jennifer to address with map tactics. *)
 
+Lemma extension : forall A G x (tau : Expr.typ),
+    ChorEnv.MapsTo A x tau G <-> Var.Map.MapsTo x tau (ChorEnv.find A G).
+Proof.
+  intros A G x tau.
+  split.
+  auto.
+  auto.
+Qed.
+
 Lemma nin_dj : forall  {X : Type} x (M1 : Var.Map.t X) M2,
     Var.Map.Properties.Disjoint M1 M2 ->
     Var.Map.In x M2 ->
@@ -477,6 +486,14 @@ Lemma partition_dj_env : forall  {X : Type} A B (CE1 : ChorEnv.t X) CE2 M1 M2,
     Var.Map.Partition (ChorEnv.find B CE2) M1 M2 ->
     Var.Map.Properties.Disjoint (ChorEnv.find A CE1)
       (ChorEnv.find A (Actor.Map.add B M2 CE2)).
+Proof.
+Admitted.
+
+Lemma remove_add_dj_env : forall CE1 CE2 A B x tau,
+    Var.Map.Properties.Disjoint (ChorEnv.find A CE1) (ChorEnv.find A CE2) ->
+    Var.Map.Properties.Disjoint
+      (ChorEnv.find A (CE_remove B x CE1))
+      (ChorEnv.find A (ChorEnv.add B x tau CE2)).
 Proof.
 Admitted.
       
@@ -538,6 +555,14 @@ Lemma nin_remove_ce : forall (CE : ChorEnv.t Expr.typ) A x B y,
 Proof.
 Admitted.
 
+Lemma partition_remove_all : forall (CE1 : ChorEnv.t Expr.typ) CE2 CE3 A B x,
+    Var.Map.Partition (ChorEnv.find A CE1) (ChorEnv.find A CE2) (ChorEnv.find A CE3) ->
+    Var.Map.Partition (ChorEnv.find A (CE_remove B x CE1))
+      (ChorEnv.find A (CE_remove B x CE2))
+      (ChorEnv.find A (CE_remove B x CE3)).
+Proof.
+Admitted.
+  
 Lemma partition_remove : forall (Delta : Var.Map.t Expr.typ) Delta1 Delta2 x tau,
     Var.Map.Partition (Var.Map.add x tau Delta) Delta1 Delta2 ->
     ~ Var.Map.In x Delta ->
@@ -725,15 +750,6 @@ Admitted.
 
 (* STOP Easily(?) proven facts *)
 
-Lemma extension : forall A G x (tau : Expr.typ),
-    ChorEnv.MapsTo A x tau G <-> Var.Map.MapsTo x tau (ChorEnv.find A G).
-Proof.
-  intros A G x tau.
-  split.
-  auto.
-  auto.
-Qed.
-
 Lemma wt_disjoint : forall A G D T C,
     WellTyped G D T C ->
     Var.Map.Properties.Disjoint (ChorEnv.find A G) (ChorEnv.find A D).
@@ -792,16 +808,35 @@ Proof.
 
       eapply EPR.
       { auto. }
-      {
-        apply (IHC G (ChorEnv.add B z Expr.QUBIT (ChorEnv.add A' y Expr.QUBIT D))
-                 T G0 H8 G').
+      { 
+        apply (IHC (CE_remove B z (CE_remove A' y G))
+                 (ChorEnv.add B z Expr.QUBIT (ChorEnv.add A' y Expr.QUBIT D))
+                 T (CE_remove B z (CE_remove A' y G0)) H8
+                 (CE_remove B z (CE_remove A' y G'))).
         intros A0.
         destruct (HE A0) as [HEA0A HEA0B].
         split.
-        { apply HEA0A. }
+        { 
+          pose proof (partition_remove_all G' G G0 A0 A' y HEA0A) as HEA0Ay.
+          apply (partition_remove_all
+                   (CE_remove A' y G')
+                   (CE_remove A' y G)
+                   (CE_remove A' y G0)
+                   A0 B z HEA0Ay).
+        }
         {
-        
+          pose proof (remove_add_dj_env G0 D A0 A' y (Expr.QUBIT) HEA0B) as HEA0By.
+          apply (remove_add_dj_env (CE_remove A' y G0) (ChorEnv.add A' y Expr.QUBIT D)
+                   A0 B z (Expr.QUBIT) HEA0By).
+        }
+      }
+      { auto. }
+      { auto. }
 
+    + 
+        HERE
+
+        
 Lemma weakening_gen' : forall G D T C,
     WellTyped G D T C ->
     forall G',
