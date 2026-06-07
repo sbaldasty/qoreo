@@ -1291,7 +1291,6 @@ Proof.
               {
                 rewrite <- HCasesAeqBL in *.
                 assert (A <> A'); auto.
-                (* rewrite -> (addadd3 D A x tau A' DeltaA2 H) in HWTDJ. *)
                 pose proof (nin_dj x
                               (ChorEnv.find A (ChorEnv.add A y tau0 G))
                               (ChorEnv.find A (ChorEnv.add A x tau (Actor.Map.add A' DeltaA2 D)))
