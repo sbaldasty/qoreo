@@ -48,6 +48,7 @@ Module Insn.
 
     Definition bindt : Type := Actor.t * Var.t.
 
+    (* 
     Definition bindings (I : t) : list bindt :=
       match I with
       | Send B1 e B2 y => [(B2,y)]    
@@ -56,6 +57,7 @@ Module Insn.
       | LetBang B y e => [(B,y)]
       | LetPair B y1 y2 e => [(B,y1);(B,y2)]
     end.
+    *)
 
     Definition bind_eq  (Ax : bindt) (By: bindt) : Prop := (fst Ax) = (fst By) /\ (snd Ax) = (snd By).
 
@@ -326,7 +328,7 @@ Inductive step : Choreography.t -> ChorEnv.t nat -> Config.t ->
     step (I::C) refs cfg l (I::C') refs' cfg'
 .
 
-(* If this works, should go into ChoreEnv module. *)
+(* This should go into ChoreEnv module. *)
 Definition CE_remove (A : Actor.t) (x : Var.t) (CE : ChorEnv.t Expr.typ) :  ChorEnv.t Expr.typ :=
   (Actor.Map.add A (Var.Map.remove x (ChorEnv.find A CE)) CE).
 
@@ -395,7 +397,8 @@ Inductive WellTyped : ChorEnv.t Expr.typ -> ChorEnv.t Expr.typ -> ChorEnv.t nat 
 
 From Stdlib Require Import Morphisms. (* for Proper *)
 
-Global Instance WellTypedProper : Proper (ChorEnv.Equal ==> ChorEnv.Equal ==> ChorEnv.Equal ==> eq ==> iff) WellTyped.
+Global Instance WellTypedProper :
+  Proper (ChorEnv.Equal ==> ChorEnv.Equal ==> ChorEnv.Equal ==> eq ==> iff) WellTyped.
 Admitted.
 
 (* Helpful Lemmas about binding equality based on Insn.beq *)
@@ -1075,6 +1078,48 @@ Lemma nri_lin : forall G A x tau D T I C G' D' T',
     WellTyped G' (ChorEnv.add A x tau D') T' C ->
     ~(Insn.rebound_in A x I = true).
 Proof.
+  intros G A x tau D T I C G' D' T' HWTIC HWTC.
+
+  destruct I as [ A' e B y | A' y B z | A' y e | A' y e | A' y z e ].
+
+  - inversion HWTIC; subst.
+    unfold Insn.rebound_in.
+    destruct (Insn.bind_eqb_false (A,x) (B,y)) as [HBEQA HBEQB].
+    destruct (not_true_iff_false (Insn.bind_eqb (A, x) (B, y))) as [HNTFA HNTFB].
+    apply HNTFB.
+    apply HBEQB.
+
+    pose proof (wt_disjoint A
+                  (ChorEnv.add B y tau0 G)
+                  (Actor.Map.add A' DeltaA2 (ChorEnv.add A x tau D))
+                  (Actor.Map.add A' ThetaA2 T) C H9) as HWTDJ.
+
+    assert (A = B \/ A <> B) as HCasesAeqB.
+    tauto.
+    
+    destruct HCasesAeqB as [HCasesAeqBL | HCasesAeqBR].
+    
+    {
+      rewrite <- HCasesAeqBL in *.
+      assert (A <> A'); auto.
+      rewrite -> (addadd3 D A x tau A' DeltaA2 H) in HWTDJ.
+      pose proof (nin_dj x
+                    (ChorEnv.find A (ChorEnv.add A y tau0 G))
+                    (ChorEnv.find A (ChorEnv.add A x tau (Actor.Map.add A' DeltaA2 D)))
+                    HWTDJ
+                    (in_beq (Actor.Map.add A' DeltaA2 D) A x tau)) as Hnindj.
+      rewrite -> (add_find G A y tau0) in Hnindj.
+      pose proof (nin_nxeq (ChorEnv.find A G) x y tau0 Hnindj).
+      apply (Insn.nbeqlr (A,x) (A,y)).
+      auto.
+    }
+    {
+      apply (Insn.nbeqlr (A,x) (B,y)).
+      auto.
+    }
+
+  -
+     
 Admitted.
 
 Lemma esubst_lin : forall Gamma Delta e x v tau,
