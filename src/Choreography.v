@@ -1287,7 +1287,6 @@ Proof.
 Qed.
 
 
-(* DISCUSS: Jennifer to retrofit? *)
 (*
 Lemma wt_subst_bang : forall tau G D T A x v C,
     WellTyped G D T C ->
