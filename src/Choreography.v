@@ -329,7 +329,6 @@ Inductive WellTyped :
                                 
 | EPR : forall G D T A x B y C,
     A <> B ->
-    (* DISCUSS: classical shadowing added to typing *)
     WellTyped (CE_remove B y (CE_remove A x G))
       (ChorEnv.add B y Expr.QUBIT (ChorEnv.add A x Expr.QUBIT D)) T C ->
 
@@ -447,7 +446,7 @@ Qed.
 
 (* A slew of Lemmas for manipulating environment mappings. *)
 
-(* START Jennifer to address with map tactics. DISCUSS *)
+(* START Jennifer to address with map tactics. *)
 
 Lemma extension : forall A G x (tau : Expr.typ),
     ChorEnv.MapsTo A x tau G <-> Var.Map.MapsTo x tau (ChorEnv.find A G).
@@ -468,6 +467,13 @@ Lemma nin_dj : forall  {X : Type} x (M1 : Var.Map.t X) M2,
     Var.Map.Properties.Disjoint M1 M2 ->
     Var.Map.In x M2 ->
     ~ Var.Map.In x M1.
+Proof.
+Admitted.
+
+Lemma remove_nin_dj : forall  {X : Type} x (M1 : Var.Map.t X) M2,
+    Var.Map.Properties.Disjoint M1 (Var.Map.remove x M2) ->
+    ~ Var.Map.In x M1 ->
+    Var.Map.Properties.Disjoint M1 M2.
 Proof.
 Admitted.
 
@@ -514,6 +520,11 @@ Lemma partition_sym : forall {X : Type} (M : Var.Map.t X) M1 M2,
     Var.Map.Partition M M1 M2 -> Var.Map.Partition M M2 M1.
 Proof.
 Admitted.
+      
+Lemma dj_sym : forall {X : Type} (M1 : Var.Map.t X) M2,
+    Var.Map.Properties.Disjoint M1 M2 -> Var.Map.Properties.Disjoint M2 M1.
+Proof.
+Admitted.
     
 Lemma add_empty_delta : forall A x tau (D : ChorEnv.t Expr.typ),
     ~ Actor.Map.Empty (ChorEnv.add A x tau D).
@@ -546,6 +557,11 @@ Admitted.
 
 Lemma add_find : forall (CE : ChorEnv.t Expr.typ) A x tau,
     (ChorEnv.find A (ChorEnv.add A x tau CE)) = (Var.Map.add x tau (ChorEnv.find A CE)).
+Proof.
+Admitted.
+
+Lemma remove_find : forall (CE : ChorEnv.t Expr.typ) A x,
+    (ChorEnv.find A (CE_remove A x CE)) = (Var.Map.remove x (ChorEnv.find A CE)).
 Proof.
 Admitted.
 
@@ -838,6 +854,43 @@ Proof.
                     (CE_remove B z (CE_remove A' y G))
                     (ChorEnv.add B z Expr.QUBIT (ChorEnv.add A' y Expr.QUBIT D))
                     T H8).
+      
+      assert (A = A' \/ A <> A') as HCasesAeqA'.
+      tauto.
+      
+      destruct HCasesAeqA' as [HCasesAeqA'L | HCasesAeqA'R].
+      
+      (* Case A = A' *)
+      {
+        rewrite <- HCasesAeqA'L in *.
+        rewrite -> (find_ab_neq1 A B z Expr.QUBIT (ChorEnv.add A y Expr.QUBIT D) H6) in IHC.
+        unfold CE_remove in IHC at 1.
+        
+        rewrite -> 
+          (find_ab_neq2 A B
+             (Var.Map.remove z (ChorEnv.find B (CE_remove A y G)))
+             (CE_remove A y G) H6)
+          in IHC.
+
+        pose proof (dj_sym
+                      (ChorEnv.find A (CE_remove A y G))
+                      (ChorEnv.find A (ChorEnv.add A y Expr.QUBIT D))
+                      IHC) as Hdjsym.
+        pose proof (remove_dj_env 
+                      D
+                      (CE_remove A y G)
+                      A y Expr.QUBIT
+                      Hdjsym) as Hrdj.
+        rewrite -> (remove_find G A y) in Hrdj.
+        apply (dj_sym (ChorEnv.find A D) (ChorEnv.find A G)
+                 (remove_nin_dj 
+                    y (ChorEnv.find A D) (ChorEnv.find A G)
+                    Hrdj H9)).
+      }
+      {
+        
+      
+        
         
 Admitted.
 
@@ -1156,7 +1209,7 @@ Proof.
 Qed.
  *)
 
-(* DISCUSS: to add to Expr.v? *)
+(* replace with Expr.subst_not_in *)
 Lemma esubst : forall Gamma Delta Theta e x v tau,
     Expr.WellTyped Gamma Delta Theta e tau ->
     ~ Var.Map.In x Gamma -> 
