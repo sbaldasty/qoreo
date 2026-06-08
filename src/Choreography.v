@@ -832,7 +832,12 @@ Proof.
         }
       }
 
-    + 
+    + intros G D T HWT.
+      inversion HWT; subst.
+      specialize (IHC
+                    (CE_remove B z (CE_remove A' y G))
+                    (ChorEnv.add B z Expr.QUBIT (ChorEnv.add A' y Expr.QUBIT D))
+                    T H8).
         
 Admitted.
 
