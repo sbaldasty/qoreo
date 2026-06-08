@@ -1084,6 +1084,7 @@ Admitted.
 Lemma csubst_lin : forall G D T C A x v,
     WellTyped G D T C ->
     ~ (Var.Map.In x (ChorEnv.find A D)) ->
+    ~ (Var.Map.In x (ChorEnv.find A G)) ->
     (Choreography.subst A x v C) = C.
 Proof.
 Admitted.
@@ -1184,7 +1185,8 @@ Proof.
                 contradiction.
               }
               {
-                specialize (HCSL HninA).
+                rewrite (find_ab_neq1 A B y tau0 G H7) in HCSL.
+                specialize (HCSL HninA HninG).
                 rewrite -> HCSL.
                 eauto.
               }
@@ -1447,7 +1449,9 @@ Proof.
               }
               {
                 unfold Insn.rebound_in in Heq.
-                specialize (HCSL (nin_mapl DeltaA2 x y tau0 (nbeqeq A x y Heq) HninA)).
+                specialize (HCSL
+                              (nin_mapl DeltaA2 x y tau0 (nbeqeq A x y Heq) HninA)
+                              (nin_remove_ce G A x A y HninG)).
                 rewrite -> HCSL.
                 eauto.
               }
@@ -1664,8 +1668,7 @@ Proof.
                              C
                              A x v H7) as HCSL.
                rewrite -> (find_add A DeltaA2 D) in HCSL.
-                       
-               specialize (HCSL HninA).
+               specialize (HCSL HninA (find_nbeq G A x A y tau0 Heq HninG)).
                rewrite -> HCSL.
                eauto.
              }
@@ -1880,7 +1883,8 @@ Proof.
                 
                 pose proof (nin_mapl DeltaA2 x z tau2 (nbeqeq A x z HeqB) HninA) as Hninz.
                 specialize (HCSL (nin_mapl (Var.Map.add z tau2 DeltaA2)
-                                    x y tau1 (nbeqeq A x y HeqA) Hninz)).
+                                    x y tau1 (nbeqeq A x y HeqA) Hninz) HninGzy).
+
                 rewrite -> HCSL.
                 eauto.
               }
