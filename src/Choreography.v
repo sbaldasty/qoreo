@@ -235,8 +235,6 @@ Module Label.
         end.
 End Label.
 
-
-
 (** Semantics **)
 
 Inductive step : Choreography.t -> ChorEnv.t nat -> Config.t ->
@@ -460,6 +458,12 @@ Proof.
   auto.
 Qed.
 
+Lemma empty_dj : forall {X : Type} (CE1 : ChorEnv.t X) CE2 A,
+    Actor.Map.Empty CE2 ->
+    Var.Map.Properties.Disjoint (ChorEnv.find A CE1) (ChorEnv.find A CE2).
+Proof.
+Admitted.
+    
 Lemma nin_dj : forall  {X : Type} x (M1 : Var.Map.t X) M2,
     Var.Map.Properties.Disjoint M1 M2 ->
     Var.Map.In x M2 ->
@@ -474,12 +478,27 @@ Lemma partition_dj : forall  {X : Type} (M : Var.Map.t X) M1 M2 M3,
 Proof.
 Admitted.
 
+Lemma partition_concat_dj : forall  {X : Type} (M : Var.Map.t X) M1 M2 M3,
+    Var.Map.Partition M1 M2 M3  ->
+    Var.Map.Properties.Disjoint M M2 ->
+    Var.Map.Properties.Disjoint M M3 ->
+    Var.Map.Properties.Disjoint M M1.
+Proof.
+Admitted.
+
 (* follows by partition_dj in case A = B, immediate otherwise *)
 Lemma partition_dj_env : forall  {X : Type} A B (CE1 : ChorEnv.t X) CE2 M1 M2,
     Var.Map.Properties.Disjoint (ChorEnv.find A CE1) (ChorEnv.find A CE2) ->
     Var.Map.Partition (ChorEnv.find B CE2) M1 M2 ->
     Var.Map.Properties.Disjoint (ChorEnv.find A CE1)
       (ChorEnv.find A (Actor.Map.add B M2 CE2)).
+Proof.
+Admitted.
+
+Lemma remove_dj_env : forall  {X : Type} (CE1 : ChorEnv.t X) CE2 A x tau,
+    Var.Map.Properties.Disjoint
+      (ChorEnv.find A (ChorEnv.add A x tau CE1)) (ChorEnv.find A CE2) -> 
+  Var.Map.Properties.Disjoint (ChorEnv.find A CE1) (ChorEnv.find A CE2).
 Proof.
 Admitted.
 
@@ -756,10 +775,65 @@ Admitted.
 
 (* STOP Easily(?) proven facts *)
 
-Lemma wt_disjoint : forall A G D T C,
+Lemma wt_disjoint : forall C A G D T,
     WellTyped G D T C ->
     Var.Map.Properties.Disjoint (ChorEnv.find A G) (ChorEnv.find A D).
 Proof.
+  intros C A.
+
+  induction C as [| I C].
+
+  (* Case Nil *)
+  - intros G D T HWT.
+    inversion HWT; subst.
+    apply (empty_dj G D A H).
+
+  - destruct I as [ A' e B y | A' y B z | A' y e | A' y e | A' y z e ].
+
+    + intros G D T HWT.
+      inversion HWT; subst.
+      specialize (IHC
+                    (ChorEnv.add B y tau G)
+                    (Actor.Map.add A' DeltaA2 D)
+                    (Actor.Map.add A' ThetaA2 T)
+                    H9).
+
+      assert (A = A' \/ A <> A') as HCasesAeqA'.
+      tauto.
+      
+      destruct HCasesAeqA' as [HCasesAeqA'L | HCasesAeqA'R].
+      
+      (* Case A = A' *)
+      {
+        rewrite <- HCasesAeqA'L in *.
+        rewrite -> (find_ab_neq1 A B y tau G H7) in IHC.
+        rewrite -> (find_add A DeltaA2 D) in IHC.
+        Check Expr.wt_disjoint.
+        pose proof (Expr.wt_disjoint
+                      (ChorEnv.find A G) DeltaA1 ThetaA1 e (Expr.BANG tau) H8) as Hewtdj.
+        apply (partition_concat_dj
+                 (ChorEnv.find A G) (ChorEnv.find A D) DeltaA1 DeltaA2
+                 H10 Hewtdj IHC).
+      }
+      (* Case A <> A' *)
+      {
+        rewrite -> (find_ab_neq2 A A' DeltaA2 D  HCasesAeqA'R) in IHC.
+
+        assert (A = B \/ A <> B) as HCasesAeqB.
+        tauto.
+        
+        destruct HCasesAeqB as [HCasesAeqBL | HCasesAeqBR].
+        {
+          rewrite <- HCasesAeqBL in *.
+          apply (remove_dj_env G D A y tau IHC).
+        }
+        {
+          rewrite -> (find_ab_neq1 A B y tau G HCasesAeqBR) in IHC; auto.       
+        }
+      }
+
+    + 
+        
 Admitted.
 
 Lemma weakening_gen : forall C G D T G0,
