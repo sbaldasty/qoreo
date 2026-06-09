@@ -1320,7 +1320,13 @@ Lemma wt_subst_bang : forall tau G D T A x v C,
     Expr.WellTyped (Var.Map.empty _) (Var.Map.empty _) (Var.Map.empty _) v tau ->
     WellTyped G D T (Choreography.subst A x v C).
 Proof.
+    intros tau G D T A x v C HWT HWTV.
+
+    induction C.
+
+    
 Admitted.
+
 
 (*
   intros tau G D T A x v C HWT HV HWTV HA.
@@ -1448,7 +1454,6 @@ Proof.
 Admitted.
 
 Lemma wt_subst_lin : forall C ThetaA1 ThetaA2 tau G D T A x v,
-    Expr.Val v ->
     Expr.WellTyped (Var.Map.empty _) (Var.Map.empty _) ThetaA1 v tau ->
     WellTyped G (ChorEnv.add A x tau D) (Actor.Map.add A ThetaA2 T) C ->
     Var.Map.Partition (ChorEnv.find A T) ThetaA1 ThetaA2 ->
@@ -1459,13 +1464,13 @@ Proof.
   intros C. induction C as [| I C IHC ].
 
   (* Case C = Nil is not possible. *)
-  - intros ThetaA1 ThetaA2 tau G D T A x v Hval Hv HC HinG HinD HninD.
+  - intros ThetaA1 ThetaA2 tau G D T A x v Hv HC HinG HinD HninD.
     inversion HC; subst.
     pose proof (add_empty_delta A x tau D).
     contradiction.
     
   (* Case C = I::C' *) 
-  - intros ThetaA1 ThetaA2 tau G D T A x v Hval Hv HC HinT HninG HninD.
+  - intros ThetaA1 ThetaA2 tau G D T A x v Hv HC HinT HninG HninD.
     destruct I as [ A' e B y | A' y B z | A' y e | A' y e | A' y z e ].
 
     (* Case Send *)
@@ -1592,7 +1597,7 @@ Proof.
                               (Actor.Map.add A (Var.Map.remove x DeltaA2) D)
                               (Actor.Map.add A (Var.Map.concat ThetaA1 ThetaA3) T)
                               A x v
-                              Hval Hv).
+                              Hv).
                 rewrite -> (add_remove D DeltaA2 A x tau) in IHC.
                 rewrite -> (addadd2 A T ThetaA3 (Var.Map.concat ThetaA1 ThetaA3)) in IHC.
                 rewrite -> (addadd1 A D DeltaA2 x tau) in H9.
@@ -1675,7 +1680,7 @@ Proof.
                             (ChorEnv.add B y tau0 G)
                             (Actor.Map.add A' DeltaA2 D)
                             (Actor.Map.add A' ThetaA3 T)
-                            A x v Hval Hv H9).
+                            A x v Hv H9).
               rewrite -> (find_ab_neq2 A A' ThetaA3 T HCasesAeqA'R) in IHC.
               rewrite -> (find_ab_neq2 A A' DeltaA2 D HCasesAeqA'R) in IHC.
               simpl in Heq.
@@ -1705,7 +1710,7 @@ Proof.
       (* specialize and apply IH *)
       specialize (IHC ThetaA1 ThetaA2 tau (ChorEnv.remove B z (ChorEnv.remove A' y G))
                     (ChorEnv.add B z Expr.QUBIT (ChorEnv.add A' y Expr.QUBIT D))
-                    T A x v Hval Hv H8 HinT HninGyz HaddAB).
+                    T A x v Hv H8 HinT HninGyz HaddAB).
 
       eapply EPR; auto.
 
@@ -1878,7 +1883,7 @@ Proof.
                               (ChorEnv.remove A y G)
                               (Actor.Map.add A (Var.Map.add y tau0 DeltaA2') D)
                               (Actor.Map.add A (Var.Map.concat ThetaA1 ThetaA3) T)
-                              A x v Hval Hv).
+                              A x v Hv).
                 
                 unfold ChorEnv.add in IHC.
                 rewrite -> (find_add A (Var.Map.add y tau0 DeltaA2') D) in IHC.
@@ -1935,7 +1940,7 @@ Proof.
               specialize (IHC ThetaA1 ThetaA2 tau (ChorEnv.remove A' y G)
                             (Actor.Map.add A' (Var.Map.add y tau0 DeltaA2) D)
                             (Actor.Map.add A' ThetaA3 T)
-                            A x v Hval Hv H7).
+                            A x v Hv H7).
  
               rewrite -> (find_ab_neq2 A A' ThetaA3 T HCasesAeqA'R) in IHC.
               rewrite -> (find_ab_neq2 A A' (Var.Map.add y tau0 DeltaA2) D HCasesAeqA'R) in IHC.
@@ -2087,7 +2092,7 @@ Proof.
                               (Actor.Map.add A DeltaA2' D)
                               (Actor.Map.add A (Var.Map.concat ThetaA1 ThetaA3) T)
                               A x v
-                              Hval Hv).
+                              Hv).
 
                 rewrite <- HCasesAeqA'L in IHC.
                 rewrite -> (addadd2 A T ThetaA3 (Var.Map.concat ThetaA1 ThetaA3)) in IHC.
@@ -2138,7 +2143,7 @@ Proof.
                             (ChorEnv.add A' y tau0 G)
                             (Actor.Map.add A' DeltaA2 D)
                             (Actor.Map.add A' ThetaA3 T)
-                            A x v Hval Hv H7).
+                            A x v Hv H7).
               rewrite -> (find_ab_neq2 A A' ThetaA3 T HCasesAeqA'R) in IHC.
               rewrite -> (find_ab_neq2 A A' DeltaA2 D HCasesAeqA'R) in IHC.
               simpl in Heq.
@@ -2318,7 +2323,7 @@ Proof.
                               (ChorEnv.remove A y (ChorEnv.remove A z G))
                               (Actor.Map.add A (Var.Map.add y tau1 (Var.Map.add z tau2 DeltaA2')) D)
                               (Actor.Map.add A (Var.Map.concat ThetaA1 ThetaA3) T)
-                              A x v Hval Hv).
+                              A x v Hv).
 
                 rewrite -> (addadd2 A T ThetaA3 (Var.Map.concat ThetaA1 ThetaA3)) in IHC.
                 rewrite -> (find_add A (Var.Map.concat ThetaA1 ThetaA3) T) in IHC.
@@ -2387,7 +2392,7 @@ Proof.
               specialize (IHC ThetaA1 ThetaA2 tau (ChorEnv.remove A' y (ChorEnv.remove A' z G))
                             (Actor.Map.add A' (Var.Map.add y tau1 (Var.Map.add z tau2 DeltaA2)) D)
                             (Actor.Map.add A' ThetaA3 T)
-                            A x v Hval Hv H8).
+                            A x v Hv H8).
  
               rewrite -> (find_ab_neq2 A A' ThetaA3 T HCasesAeqA'R) in IHC.
               rewrite -> (find_ab_neq2 A A' (Var.Map.add y tau1 (Var.Map.add z tau2 DeltaA2))
@@ -2413,7 +2418,6 @@ Proof.
       }
 Qed.
 
-    
 (* placeholder for well-formedness definition *)
 Definition  WellFormed (cfg : Config.t) (C : ChorEnv.t nat) : Prop := True.
 
