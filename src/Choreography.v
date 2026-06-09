@@ -1315,16 +1315,57 @@ Proof.
       { auto. }
 Qed.
 
-Lemma wt_subst_bang : forall tau G D T A x v C,
+Lemma wt_subst_bang : forall C tau G D T A x v,
     WellTyped (ChorEnv.add A x tau G) D T C ->
     Expr.WellTyped (Var.Map.empty _) (Var.Map.empty _) (Var.Map.empty _) v tau ->
     WellTyped G D T (Choreography.subst A x v C).
 Proof.
-    intros tau G D T A x v C HWT HWTV.
-
-    induction C.
-
+    intros C. induction C as [| I C IHC ].
     
+  (* Case C = Nil *)
+    - intros tau G D T A x v HWT HWTV.
+      unfold Choreography.subst.
+      inversion HWT; subst.
+      apply Nil; auto.
+
+    (* Case C = I::C' *) 
+    - intros tau G D T A x v HWT HWTV.
+      destruct I as [ A' e B y | A' y B z | A' y e | A' y e | A' y z e ].
+
+      (* Case Send *)
+      + inversion HWT; subst.
+
+        specialize (IHC tau
+                      (ChorEnv.add B y tau0 G)
+                      (Actor.Map.add A' DeltaA2 D)
+                      (Actor.Map.add A' ThetaA2 T)
+                      A x v).
+        
+        assert (A = A' \/ A <> A') as HCasesAeqA'.
+        tauto.
+        
+        destruct HCasesAeqA' as [HCasesAeqA'L | HCasesAeqA'R].
+        
+        (* Case A = A' *)
+        {
+          rewrite <- HCasesAeqA'L in *.
+
+          unfold ChorEnv.add in H8.
+          rewrite -> find_add in H8.
+          pose proof
+            (Expr.wt_subst_bang e tau (ChorEnv.find A G) DeltaA1 ThetaA1 x v (Expr.BANG tau0)
+            HWTV H8) as HEWTSB.
+
+          - eapply Send; auto.
+
+            {
+              destruct (Actor.FSet.MF.eq_dec A A) eqn:Heq.
+              { eauto. }
+              { contradiction. }
+            }
+
+            { 
+              fold Choreography.subst.
 Admitted.
 
 
@@ -1641,7 +1682,6 @@ Proof.
               apply HNTFB.
               apply HBEQB.
 
-              Check wt_disjoint.
               pose proof (wt_disjoint C A
                             (ChorEnv.add B y tau0 G)
                             (ChorEnv.add A x tau (Actor.Map.add A' DeltaA2 D))
