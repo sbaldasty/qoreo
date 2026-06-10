@@ -1700,7 +1700,37 @@ Proof.
          }
 
       (* Case LetPair *)
-      +
+      + inversion HWT; subst.
+        
+        assert (A = A' \/ A <> A') as HCasesAeqA'.
+        tauto.
+        
+        destruct HCasesAeqA' as [HCasesAeqA'L | HCasesAeqA'R].
+        
+        (* Case A = A' *)
+        {
+          rewrite <- HCasesAeqA'L in *.
+          
+          eapply LetPair; auto.
+          
+          {
+            destruct (Actor.FSet.MF.eq_dec A A) eqn:Heq.
+            {
+              unfold ChorEnv.add in H4.
+              rewrite find_add in H4.
+              pose proof
+                (Expr.wt_subst_bang e tau
+                   (ChorEnv.find A G) DeltaA1 ThetaA1
+                   x v (Expr.Tensor tau1 tau2)
+                   HWTV H4) as HEWTSB.
+              eauto.
+            }
+            { contradiction. }
+          }
+          
+          {
+            fold Choreography.subst.
+            unfold Insn.rebound_in.
 
          
            
