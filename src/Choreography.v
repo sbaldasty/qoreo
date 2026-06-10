@@ -665,23 +665,28 @@ Proof.
 Admitted.
 
 (* this lemma may help prove the preceding lemma. *)
-Lemma addadd6 :  forall {X : Type} x taux y tauy (M : Var.Map.t X),
+Lemma addadd6 : forall {X : Type} x taux y tauy (M : Var.Map.t X),
     x <> y -> 
     (Var.Map.add y tauy (Var.Map.add x taux M)) =
       (Var.Map.add x taux (Var.Map.add y tauy M)).
 Proof.
 Admitted.
 
-Lemma addadd7 :  forall (CE : ChorEnv.t Expr.typ) A x tau1 y tau2 M,
+Lemma addadd7 : forall (CE : ChorEnv.t Expr.typ) A x tau1 y tau2 M,
     x <> y -> 
     Actor.Map.add A (Var.Map.add y tau2 M) (ChorEnv.add A x tau1 CE) =
       ChorEnv.add A x tau1 (Actor.Map.add A (Var.Map.add y tau2 M) CE).
 Proof.
 Admitted.
 
-Lemma addadd8 :  forall (CE : ChorEnv.t Expr.typ) A x tau M, 
+Lemma addadd8 : forall (CE : ChorEnv.t Expr.typ) A x tau M, 
     Actor.Map.add A (Var.Map.add x tau M) CE =
       ChorEnv.add A x tau (Actor.Map.add A M CE).
+Proof.
+Admitted.
+
+Lemma overwrite : forall (CE : ChorEnv.t Expr.typ) A x tau1 tau2,
+    ChorEnv.add A x tau1 (ChorEnv.add A x tau2 CE) = ChorEnv.add A x tau1 CE.
 Proof.
 Admitted.
 
@@ -1366,6 +1371,57 @@ Proof.
 
             { 
               fold Choreography.subst.
+              unfold Insn.rebound_in.
+              destruct (Insn.bind_eqb (A, x) (B, y)) eqn:Hbeq.
+              { 
+                destruct (beq A B x y) as [HbeqL _].
+                destruct (HbeqL Hbeq) as [HABeq _].
+                contradiction.
+              }
+              {
+                rewrite addadd5 in H9; auto.
+              }
+            }
+
+            { auto. }
+            { auto. }
+        }
+        (* Case A <> A' *)
+        {
+          rewrite find_ab_neq1 in H8; auto.
+
+          eapply Send; auto.
+                   
+          {
+            destruct (Actor.FSet.MF.eq_dec A A') eqn:Heq.
+            { contradiction. }
+            { eauto. }
+          }
+            { 
+              fold Choreography.subst.
+              unfold Insn.rebound_in.
+              destruct (Insn.bind_eqb (A, x) (B, y)) eqn:Hbeq.
+              { 
+                destruct (beq A B x y) as [HbeqL _].
+                destruct (HbeqL Hbeq) as [HABeqL HABeqR].
+                rewrite <- HABeqL in *.
+                rewrite <- HABeqR in *.
+                rewrite overwrite in H9.
+                eauto.
+              }
+              {
+                rewrite addadd5 in H9; auto.
+              }
+            }
+
+            { auto. }
+            
+            { auto. }
+        }
+
+      + 
+        
+              
 Admitted.
 
 
