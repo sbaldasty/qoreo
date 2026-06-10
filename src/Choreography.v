@@ -1510,9 +1510,200 @@ Proof.
               }
             }
             {
-              
-            
-              
+              unfold Insn.rebound_in in Hrin.
+              rewrite orb_false_iff in Hrin.
+              destruct Hrin as [HneqA HneqB].
+              rewrite rmadd2 in H8; auto.
+              rewrite rmadd2 in H8; auto.
+              apply (IHC
+                       tau 
+                       (ChorEnv.remove B z (ChorEnv.remove A' y G))
+                       (ChorEnv.add B z Expr.QUBIT (ChorEnv.add A' y Expr.QUBIT D))
+                       T A x v H8 HWTV).
+            }
+          }
+        }
+
+      (* Case Let *)
+      +  inversion HWT; subst.
+        
+         assert (A = A' \/ A <> A') as HCasesAeqA'.
+         tauto.
+         
+         destruct HCasesAeqA' as [HCasesAeqA'L | HCasesAeqA'R].
+         
+         (* Case A = A' *)
+         {
+           rewrite <- HCasesAeqA'L in *.
+           
+           eapply LetIn; auto.
+
+           {
+             destruct (Actor.FSet.MF.eq_dec A A) eqn:Heq.
+             {
+               unfold ChorEnv.add in H3.
+               rewrite find_add in H3.
+               pose proof
+                 (Expr.wt_subst_bang e tau (ChorEnv.find A G) DeltaA1 ThetaA1 x v tau0
+                    HWTV H3) as HEWTSB.
+               eauto.
+             }
+             { contradiction. }
+           }
+
+           {
+             fold Choreography.subst.
+             unfold Insn.rebound_in.
+             destruct (Insn.bind_eqb (A, x) (A, y)) eqn:Hbeq.
+             { 
+               destruct (beq A A x y) as [HbeqL _].
+               destruct (HbeqL Hbeq) as [_ Heqxy].
+               rewrite <- Heqxy in *.
+               rewrite rmadd1 in H7.
+               eauto.
+             }
+             {
+               rewrite rmadd2 in H7; auto.
+               apply (IHC tau
+                        (ChorEnv.remove A y G)
+                        (Actor.Map.add A (Var.Map.add y tau0 DeltaA2) D)
+                        (Actor.Map.add A ThetaA2 T)
+                        A x v H7 HWTV).
+             }
+           }
+
+           { auto. }
+           { auto. }
+           { auto. }
+         }
+         {
+           eapply LetIn; auto.
+
+           {
+             destruct (Actor.FSet.MF.eq_dec A A') eqn:Heq.
+             { contradiction. }
+             { 
+               rewrite find_ab_neq1 in H3; auto.
+               eauto.
+             }
+           }
+
+           {
+             fold Choreography.subst.
+             unfold Insn.rebound_in.
+             destruct (Insn.bind_eqb (A, x) (A', y)) eqn:Hbeq.
+             { 
+               destruct (beq A A' x y) as [HbeqL _].
+               destruct (HbeqL Hbeq) as [HeqAB _].
+               contradiction.
+             }
+             {
+               rewrite rmadd2 in H7; auto.
+               apply (IHC tau
+                        (ChorEnv.remove A' y G)
+                        (Actor.Map.add A' (Var.Map.add y tau0 DeltaA2) D)
+                        (Actor.Map.add A' ThetaA2 T)
+                        A x v H7 HWTV).
+             }
+           }
+
+           { auto. }
+           { auto. }
+           { auto. }
+
+         }
+
+      (* Case LetBang *)
+      +  inversion HWT; subst.
+                 
+         assert (A = A' \/ A <> A') as HCasesAeqA'.
+         tauto.
+         
+         destruct HCasesAeqA' as [HCasesAeqA'L | HCasesAeqA'R].
+         
+         (* Case A = A' *)
+         {
+           rewrite <- HCasesAeqA'L in *.
+           
+           eapply LetBang; auto.
+
+           {
+             destruct (Actor.FSet.MF.eq_dec A A) eqn:Heq.
+             {
+               unfold ChorEnv.add in H6.
+               rewrite find_add in H6.
+               pose proof
+                 (Expr.wt_subst_bang e tau (ChorEnv.find A G) DeltaA1 ThetaA1 x v (Expr.BANG tau0)
+                    HWTV H6) as HEWTSB.
+               eauto.
+             }
+             { contradiction. }
+           }
+
+           {
+             fold Choreography.subst.
+             unfold Insn.rebound_in.
+             destruct (Insn.bind_eqb (A, x) (A, y)) eqn:Hbeq.
+             { 
+               destruct (beq A A x y) as [HbeqL _].
+               destruct (HbeqL Hbeq) as [_ Heqxy].
+               rewrite <- Heqxy in *.
+               rewrite overwrite in H7.
+               eauto.
+             }
+             {
+               rewrite addadd5 in H7; auto.
+               apply (IHC tau
+                        (ChorEnv.add A y tau0 G)
+                        (Actor.Map.add A DeltaA2 D)
+                        (Actor.Map.add A ThetaA2 T)
+                        A x v H7 HWTV).
+             }
+           }
+
+           { auto. }
+           { auto. }
+         }
+         {
+           eapply LetBang; auto.
+
+           {
+             destruct (Actor.FSet.MF.eq_dec A A') eqn:Heq.
+             { contradiction. }
+             { 
+               rewrite find_ab_neq1 in H6; auto.
+               eauto.
+             }
+           }
+
+           {
+             fold Choreography.subst.
+             unfold Insn.rebound_in.
+             destruct (Insn.bind_eqb (A, x) (A', y)) eqn:Hbeq.
+             { 
+               destruct (beq A A' x y) as [HbeqL _].
+               destruct (HbeqL Hbeq) as [HeqAB _].
+               contradiction.
+             }
+             {
+               rewrite addadd5 in H7; auto.
+               apply (IHC tau
+                        (ChorEnv.add A' y tau0 G)
+                        (Actor.Map.add A' DeltaA2 D)
+                        (Actor.Map.add A' ThetaA2 T)
+                        A x v H7 HWTV).
+             }
+           }
+
+           { auto. }
+           { auto. }
+         }
+
+      (* Case LetPair *)
+      +
+
+         
+           
 Admitted.
 
 
