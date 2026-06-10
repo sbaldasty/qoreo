@@ -1035,24 +1035,24 @@ Proof.
   rewrite Hin in Heq. auto.
 Qed.
 
-(* Are we assuming that x does not appear in Delta1' here? *)
 Lemma nin : forall (Delta : Var.Map.t Expr.typ) Delta1' Delta1 Delta2 x tau,
     Var.Map.Equal (Var.Map.add x tau Delta1') Delta1 ->
     Var.Map.Partition (Var.Map.add x tau Delta) Delta1 Delta2 ->
+    ~ (Var.Map.In x Delta) ->
+    ~ (Var.Map.In x Delta1') ->
     ~ (Var.Map.In x Delta2) /\ Var.Map.Partition Delta Delta1' Delta2.
 Proof.
-  intros. Var.simplify.
-  Var.Map.Tactics.reflect_partition.
-  split.
-  * intros Hin. apply (Hdisj x). split; auto. Var.simplify.
-  * Var.simplify. Var.Map.Tactics.reflect_partition; auto.
-    intros z. set(Heq' := Heq z).
-    autorewrite with var_db in *.
-    Var.Map.Tactics.compare x z; auto.
-    destruct (Var.Map.find x Delta1') eqn:Hin.
-     
+  intros ? ? ? ? ? ? Heq Hpart Hnin Hnin1. Var.simplify.
+  apply Var.Map.Proofs.partition_add_inversion in Hpart; auto.
+  destruct Hpart as [[? [? ?]] | [Hcontra _]].
+  2:{
+    contradict Hcontra.
     Var.simplify.
-Admitted.
+  }
+  split; auto.
+  Var.simplify.
+  rewrite Var.Map.Proofs.remove_not_in in H1; auto.
+Qed.
 
 Lemma mapsto_destruct : forall {X : Type} x tau (M : Var.Map.t X) ,
     Var.Map.MapsTo x tau M ->
@@ -1086,7 +1086,7 @@ Proof.
     rewrite (Var.Map.Proofs.concat_sym M0 M1); auto; try reflexivity.
 Qed.
 
-(* can we assume A <> B here? What if A = B and y is in (ChorEnv.find A m)? *)
+(* can we assume A <> B here? What if A = B and y is in M? *)
 Lemma map_subset_add : forall A B y tau (CE1 : ChorEnv.t Expr.typ) CE2 M,
     Var.Map.Partition (ChorEnv.find A CE1) (ChorEnv.find A CE2) M ->
     Var.Map.Partition
@@ -2091,7 +2091,7 @@ Proof.
           (* prepare hypotheses for partitioning requirements *)
           assert (H : Var.Map.Equal (Var.Map.add x tau DeltaA1') DeltaA1).
           { symmetry. auto. }
-          pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau H H10) as Hnin.
+          pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau H H10 HninD HDA'B) as Hnin.
           pose proof (csubst
                         (ChorEnv.add B y tau0 G)
                         (Actor.Map.add A DeltaA2 D)
@@ -2369,7 +2369,7 @@ Proof.
           (* prepare hypotheses for partitioning requirements *)
           assert (Var.Map.Equal (Var.Map.add x tau DeltaA1') DeltaA1).
           { symmetry. auto. }
-          pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau H H8) as Hnin.
+          pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau H H8 HninD HDA'B) as Hnin.
           pose proof (csubst
                         (ChorEnv.remove A y G)
                         (Actor.Map.add A  (Var.Map.add y tau0 DeltaA2) D)
@@ -2580,7 +2580,7 @@ Proof.
           destruct HPartition as [HPartitionA [HPartitionB [HPartitionC HPartitionD]]].
           assert (H : Var.Map.Equal (Var.Map.add x tau DeltaA1') DeltaA1).
           { symmetry; auto. }
-          pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau H H8) as Hnin.
+          pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau H H8 HninD HDA'B) as Hnin.
           destruct Hnin as [HninA HninB].
                
           eapply LetBang.
@@ -2690,7 +2690,7 @@ Proof.
             +  assert (Var.Map.Equal (Var.Map.add x tau DeltaA2') DeltaA2) as Hdel.
                { symmetry. auto. }
                pose proof (@Var.Map.Properties.Partition_sym _ (Var.Map.add x tau (ChorEnv.find A D)) DeltaA1 DeltaA2 H8) as Hpart.
-               pose proof (nin (ChorEnv.find A D) DeltaA2' DeltaA2 DeltaA1 x tau Hdel Hpart) as Hnin.
+               pose proof (nin (ChorEnv.find A D) DeltaA2' DeltaA2 DeltaA1 x tau Hdel Hpart HninD HDA2B) as Hnin.
                destruct Hnin as [HninA HninB].
                pose proof (@Var.Map.Properties.Partition_sym _ (ChorEnv.find A D) DeltaA2' DeltaA1 HninB).
                auto.
@@ -2792,7 +2792,7 @@ Proof.
           (* prepare hypotheses for partitioning requirements *)
           assert (Var.Map.Equal (Var.Map.add x tau DeltaA1') DeltaA1).
           { symmetry. auto. }
-          pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau H H9) as Hnin.
+          pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau H H9 HninD HDA'B) as Hnin.
           pose proof (csubst
                         (ChorEnv.remove A y (ChorEnv.remove A z G))
                         (Actor.Map.add A (Var.Map.add y tau1 (Var.Map.add z tau2 DeltaA2)) D)
