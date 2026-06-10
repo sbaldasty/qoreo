@@ -1942,9 +1942,12 @@ Module Actor.
   Module FSet := Map.S.
 
   Ltac simplify :=
-    autorewrite with actor_db;
-    Map.Tactics.vsimpl;
-    try (intuition; fail).
+    repeat
+    (autorewrite with actor_db in *;
+      Map.Tactics.vsimpl;
+      repeat Map.Tactics.reduce_eq_dec;
+      try (first [tauto | reflexivity | discriminate | auto | intuition]; fail)).
+
 
   (* instantiate this for each relevant hint database *)
   Ltac reflect_find :=
@@ -1953,8 +1956,8 @@ Module Actor.
       autorewrite with actor_db in *;
       repeat Map.Tactics.reduce_eq_dec
     ).
-  Ltac fmap_decide := 
-    reflect_find; first [tauto | auto].
+  Ltac solve := 
+    repeat (reflect_find; first [tauto | discriminate | auto; fail | intuition]).
 
 (*  #[global] Existing Instance MapProofs.F.EqualSetoid.*)
   
@@ -2081,9 +2084,8 @@ Module ChorEnv.
     Qed.
 
     Lemma find_add : forall T A B x (a : T) G,
-      Var.Map.Equal
-        (ChorEnv.find A (ChorEnv.add B x a G))
-        (if Actor.eq_dec A B then Var.Map.add x a (ChorEnv.find A G) else ChorEnv.find A G).
+      (ChorEnv.find A (ChorEnv.add B x a G))
+      = (if Actor.eq_dec A B then Var.Map.add x a (ChorEnv.find A G) else ChorEnv.find A G).
     Proof.
       intros.
       unfold ChorEnv.add, ChorEnv.find.
@@ -2095,22 +2097,130 @@ Module ChorEnv.
     #[global] Hint Rewrite find_add : var_db.
 
 
-
     Lemma find_add' : forall {T} A B M (M' : t T),
-      Var.Map.Equal (find A (Actor.Map.add B M M'))
-                    (if Actor.eq_dec A B then M else find A M').
+      (find A (Actor.Map.add B M M'))
+      = (if Actor.eq_dec A B then M else find A M').
     Admitted.
     #[global] Hint Rewrite @find_add' : var_db.
 
     Lemma find_remove : forall {T} A B x (G : t T),
-      Var.Map.Equal
-        (ChorEnv.find A (ChorEnv.remove B x G))
-        (if Actor.eq_dec A B then Var.Map.remove x (find B G) else find A G).
+      (ChorEnv.find A (ChorEnv.remove B x G))
+      = (if Actor.eq_dec A B then Var.Map.remove x (find B G) else find A G).
     Proof.
       intros.
       unfold find. unfold remove.
-      Actor.simplify.
+      autorewrite with actor_db.
       repeat Actor.Map.Tactics.reduce_eq_dec; try reflexivity.
     Qed.
     #[global] Hint Rewrite @find_remove : var_db.
+
+    Global Instance find_Proper : forall T, Proper (eq ==> Equal ==> Var.Map.Equal) (@find T).
+    Proof.
+      intros T ? A ? env1 env2 Henv; subst.
+      unfold find. unfold Equal in Henv.
+      destruct Henv as [Hiff Hmapsto].
+      destruct (Actor.Map.find A env1) as [D1 | ] eqn:H1;
+      destruct (Actor.Map.find A env2) as [D2 | ] eqn:H2.
+      * apply (Hmapsto A); Actor.solve.
+      * exfalso.
+        apply Actor.Map.Properties.F.not_find_in_iff in H2.
+        apply H2.
+        rewrite <- Hiff.
+        rewrite Actor.Map.Properties.F.in_find_iff.
+        rewrite H1. congruence.
+      * exfalso.
+        apply Actor.Map.Properties.F.not_find_in_iff in H1.
+        apply H1.
+        rewrite Hiff.
+        rewrite Actor.Map.Properties.F.in_find_iff.
+        rewrite H2. congruence.
+      * reflexivity.
+    Qed.
+      
+    Global Instance add_Proper : forall T, Proper (eq ==> eq ==> eq ==> Equal ==> Equal) (@add T).
+    Proof.
+      intros T ? A ? ? x ? ? tau ? G1 G2 HG; subst.
+      assert (Hfind : Var.Map.Equal (find A G1) (find A G2)) by (rewrite HG; reflexivity).
+      destruct HG as [Hin Hmapsto].
+      split; unfold add.
+      * intros B.
+        Actor.simplify.
+        rewrite Hin. reflexivity.
+      * intros B m1 m2 Hm1 Hm2.
+        Actor.Map.Tactics.compare A B.
+        { (* A = B *)
+          Actor.reflect_find.
+          inversion Hm2; subst; clear Hm2.
+          destruct Hm1 as [[? ?] | [? ?]]; try contradiction.
+          subst.
+          rewrite Hfind.
+          reflexivity.
+        }
+        { (* A <> B *)
+          Actor.reflect_find.
+          destruct Hm1 as [[? ?] | [_ Hm1]]; try contradiction.
+          apply (Hmapsto B m1 m2); auto.
+          Actor.solve.
+        }
+    Qed.
+
+    Global Instance remove_Proper : forall T, Proper (eq ==> eq ==> Equal ==> Equal) (@remove T).
+    Proof.
+      intros T ? A ? ? x ? G1 G2 HG; subst.
+      unfold remove.
+      assert (Hfind : Var.Map.Equal (find A G1) (find A G2)) by (rewrite HG; reflexivity).
+      destruct HG as [Hin Hmapsto].
+      split.
+      * intros B.
+        Actor.simplify.
+        rewrite Hin.
+        reflexivity.
+      * intros B D1 D2 H1 H2.
+        Actor.Map.Tactics.compare A B.
+        + (* A = B *)
+          Actor.reflect_find.
+          destruct H1 as [[_ ?] | [? _]]; try contradiction.
+          inversion H2; subst; clear H2.
+          rewrite Hfind.
+          reflexivity.
+        + (* A <> B *)
+          Actor.reflect_find.
+          destruct H1 as [[? _] | [_ H1]]; try contradiction.
+          apply (Hmapsto B); auto.
+          Actor.solve.
+    Qed.
+
+    Global Instance MapsTo_Proper : forall T,
+        Proper (eq ==> eq ==> eq ==> Equal ==> iff) (@MapsTo T).
+    Proof.
+      intros T ? A ? ? x ? ? tau ? G1 G2 HG; subst.
+      unfold MapsTo.
+      rewrite HG.
+      reflexivity.
+    Qed.
+
+    Global Instance Equal_refl : forall T, Reflexive (@Equal T).
+    Proof.
+      intros T x.
+      split.
+      * intros; reflexivity.
+      * intros.
+        Actor.solve.
+        inversion H1; subst; reflexivity.
+    Qed.
+
+    Global Instance Equal_symm : forall T, Symmetric (@Equal T).
+    Proof.
+    Admitted.
+
+    Global Instance Equal_trans : forall T, Transitive (@Equal T).
+    Proof.
+    Admitted.
+
+    Global Instance actor_add_Proper : forall T, Proper (eq ==> @Var.Map.Equal T ==> Equal ==> @Equal T)
+                                                        (@Actor.Map.add (Var.Map.t T)).
+    Proof.
+      intros T ? A ? D1 D2 HD T1 T2 HT; subst.
+    Admitted.
+
 End ChorEnv.

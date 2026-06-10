@@ -559,45 +559,73 @@ Proof.
 Qed.
 
 Lemma find_add : forall {X : Type} A M (CE : ChorEnv.t X),
-    (ChorEnv.find A (Actor.Map.add A M CE)) = M.
+    ChorEnv.find A (Actor.Map.add A M CE) = M.
 Proof.
   intros.
-Admitted.
+  unfold ChorEnv.find.
+  Actor.simplify.
+Qed.
 
 Lemma find_ab_neq1 : forall {X : Type} A B x tau (CE : ChorEnv.t X),
     A <> B ->
     (ChorEnv.find A (ChorEnv.add B x tau CE)) = (ChorEnv.find A CE).
 Proof.
-Admitted.
+  intros X A B x tau CE Hneq.
+  unfold ChorEnv.find. unfold ChorEnv.add.
+  Actor.simplify.
+Qed.
 
 Lemma find_ab_neq2 : forall {X : Type} A B M (CE : ChorEnv.t X),
     A <> B ->
     (ChorEnv.find A (Actor.Map.add B M CE)) = (ChorEnv.find A CE).
 Proof.
-Admitted.
+  intros.
+  unfold ChorEnv.find.
+  Actor.simplify.
+Qed.
 
 Lemma find_nbeq : forall (CE : ChorEnv.t Expr.typ) A x B y tau,
     Insn.bind_eqb (A, x) (B, y) = false -> 
     ~ Var.Map.In x (ChorEnv.find A CE) ->
     ~ Var.Map.In x (ChorEnv.find A (ChorEnv.add B y tau CE)).
 Proof.
-Admitted.
+  intros CE A x B y tau Heq Hin.
+  Var.simplify.
+  unfold Insn.bind_eqb, Insn.bind_eq_dec in Heq; simpl in Heq.
+  Actor.Map.Tactics.compare A B.
+  * (* A = B*)
+    Var.Map.Tactics.compare x y; try discriminate.
+    (* x <> y *)
+    Var.simplify.
+  * (* A <> B *) auto.
+Qed.
 
 Lemma add_find : forall (CE : ChorEnv.t Expr.typ) A x tau,
     (ChorEnv.find A (ChorEnv.add A x tau CE)) = (Var.Map.add x tau (ChorEnv.find A CE)).
 Proof.
-Admitted.
+  intros.
+  unfold ChorEnv.find, ChorEnv.add.
+  Actor.simplify.
+Qed.
 
 Lemma remove_find : forall (CE : ChorEnv.t Expr.typ) A x,
     (ChorEnv.find A (ChorEnv.remove A x CE)) = (Var.Map.remove x (ChorEnv.find A CE)).
 Proof.
-Admitted.
+  intros.
+  Var.simplify.
+  Actor.simplify.
+Qed.
 
 Lemma add_remove : forall (CE : ChorEnv.t Expr.typ) M A x tau,
     Var.Map.MapsTo x tau M ->
-    (ChorEnv.add A x tau (Actor.Map.add A (Var.Map.remove x M) CE)) =
+    ChorEnv.Equal
+      (ChorEnv.add A x tau (Actor.Map.add A (Var.Map.remove x M) CE))
       (Actor.Map.add A M CE).
 Proof.
+  intros.
+  unfold ChorEnv.add.
+  Var.simplify. Actor.simplify.
+  split.
 Admitted.
 
 Lemma nin_remove : forall (M : Var.Map.t Expr.typ) x,
@@ -1786,11 +1814,22 @@ Proof.
                               (Actor.Map.add A (Var.Map.concat ThetaA1 ThetaA3) T)
                               A x v
                               Hv).
-                rewrite -> (add_remove D DeltaA2 A x tau) in IHC.
-                rewrite -> (addadd2 A T ThetaA3 (Var.Map.concat ThetaA1 ThetaA3)) in IHC.
-                rewrite -> (addadd1 A D DeltaA2 x tau) in H9.
-                rewrite -> (addadd2 A T ThetaA3 ThetaA2) in H9.
-                specialize (IHC H9).
+                assert (IHWT : WellTyped (ChorEnv.add B y tau0 G)
+                                         (ChorEnv.add A x tau (Actor.Map.add A
+                                            (Var.Map.remove (elt:=Expr.typ) x DeltaA2) D))
+                                         (Actor.Map.add A ThetaA3 (Actor.Map.add A (Var.Map.concat ThetaA1 ThetaA3) T))
+                                         C).
+                {
+                  eapply WellTypedProper; eauto.
+                  + reflexivity.
+                  + 
+                    rewrite add_remove; auto.
+                    unfold ChorEnv.add.
+                    rewrite addadd2.
+                    reflexivity.
+                  + rewrite addadd2. rewrite addadd2. reflexivity. 
+                }
+                specialize (IHC IHWT).
                 rewrite -> (find_add A (Var.Map.concat ThetaA1 ThetaA3) T) in IHC.
                 specialize (IHC HPartitionB).
                 rewrite -> (find_ab_neq1 A B y tau0 G H7) in IHC.
@@ -1798,7 +1837,6 @@ Proof.
                 rewrite -> (find_add A (Var.Map.remove (elt:=Expr.typ) x DeltaA2) D) in IHC.
                 specialize (IHC (nin_remove DeltaA2 x)).
                 eauto.
-                auto.
               }
               
             + apply (partition_remove (ChorEnv.find A D) DeltaA1 DeltaA2 x tau H10 HninD HninDA).
