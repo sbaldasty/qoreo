@@ -690,6 +690,18 @@ Lemma overwrite : forall (CE : ChorEnv.t Expr.typ) A x tau1 tau2,
 Proof.
 Admitted.
 
+Lemma rmadd1 : forall (CE : ChorEnv.t Expr.typ) A x tau,
+    ChorEnv.remove A x (ChorEnv.add A x tau CE) = ChorEnv.remove A x CE.
+Proof.
+Admitted.
+
+Lemma rmadd2 : forall (CE : ChorEnv.t Expr.typ) A B x y tau,
+    Insn.bind_eqb (A, x) (B, y) = false ->
+    ChorEnv.remove B y (ChorEnv.add A x tau CE) =
+      (ChorEnv.add A x tau (ChorEnv.remove B y CE)).
+Proof.
+Admitted.
+
 Lemma nin_mapl : forall (M : Var.Map.t Expr.typ)  x y tau,
     x <> y ->
     ~ Var.Map.In x M ->
@@ -1419,8 +1431,87 @@ Proof.
             { auto. }
         }
 
-      + 
+      (* Case EPR *)
+      + inversion HWT; subst.
         
+        assert (A = A' \/ A <> A') as HCasesAeqA'.
+        tauto.
+        
+        destruct HCasesAeqA' as [HCasesAeqA'L | HCasesAeqA'R].
+        
+        (* Case A = A' *)
+        {
+          rewrite <- HCasesAeqA'L in *.
+
+          eapply EPR; auto.
+
+          {
+            fold Choreography.subst.
+            destruct (Insn.rebound_in A x (Insn.EPR A y B z)) eqn:Hrin.
+            {
+              unfold Insn.rebound_in in Hrin.
+              rewrite orb_true_iff in Hrin.
+              destruct Hrin.
+              {
+                destruct (beq A A x y) as [HbeqL _].
+                destruct (HbeqL H) as [_ HAAeqR].
+                rewrite <- HAAeqR in *.
+                rewrite rmadd1 in H8.
+                auto.
+              }
+              {
+                destruct (beq A B x z) as [HbeqL _].
+                destruct (HbeqL H) as [HAAeqL _].
+                contradiction.
+              }
+            }
+            {
+              unfold Insn.rebound_in in Hrin.
+              rewrite orb_false_iff in Hrin.
+              destruct Hrin as [HbeqA HbeqB].
+
+              rewrite rmadd2 in H8; auto.
+              rewrite rmadd2 in H8; auto.
+              
+              apply (IHC tau
+                       (ChorEnv.remove B z (ChorEnv.remove A y G))
+                       (ChorEnv.add B z Expr.QUBIT (ChorEnv.add A y Expr.QUBIT D))
+                       T A x v H8 HWTV).
+            }
+          }
+        }
+        {
+          apply EPR; auto.
+          
+          {
+            fold Choreography.subst.
+            destruct (Insn.rebound_in A x (Insn.EPR A' y B z)) eqn:Hrin.
+            {
+              unfold Insn.rebound_in in Hrin.
+              rewrite orb_true_iff in Hrin.
+              destruct Hrin.
+              {
+                destruct (beq A A' x y) as [HbeqL _].
+                destruct (HbeqL H) as [HAAeqL _].
+                contradiction.
+              }
+              {
+                assert (Insn.bind_eqb (A, x) (A', y) <> true) as HnbeqAA'.
+                apply (nbeq A A' x y HCasesAeqA'R).
+                destruct (not_true_iff_false (Insn.bind_eqb (A, x) (A', y))) as [HntL _].
+                pose proof (HntL HnbeqAA').
+                destruct (beq A B x z) as [HbeqL _].
+                destruct (HbeqL H) as [HABeqL HABeqR].
+                rewrite <- HABeqL in *.
+                rewrite <- HABeqR in *.
+                rewrite -> rmadd2 in H8; auto.
+                rewrite -> (rmadd1 (ChorEnv.remove A' y G) A x tau) in H8.
+                auto.
+              }
+            }
+            {
+              
+            
               
 Admitted.
 
