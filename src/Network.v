@@ -274,6 +274,125 @@ Inductive EPP_N C : Network.t -> Prop :=
   EPP_N C (Actor.Map.remove A N) ->
   EPP_N C N.
 
+  Print Choreography.Insn.t.
+Print EPP.
+
+
+Definition eppI (D : Actor.t) (I : Choreography.Insn.t) : Process.t :=
+  match I with
+  | Choreography.Insn.Send A v B x =>
+    if Actor.eq_dec D A then [Insn.Send v B]
+    else if Actor.eq_dec D B then [Insn.Receive x A]
+    else []
+  | Choreography.Insn.EPR A x B y =>
+    if Actor.eq_dec D A then [Insn.EPR x B]
+    else if Actor.eq_dec D B then [Insn.EPR y A]
+    else []
+  | Choreography.Insn.Let A x e =>
+    if Actor.eq_dec D A then [Insn.Let x e]
+    else []
+  | Choreography.Insn.LetBang A x e =>
+    if Actor.eq_dec D A then [Insn.LetBang x e]
+    else []
+  | Choreography.Insn.LetPair A x1 x2 e =>
+    if Actor.eq_dec D A then [Insn.LetPair x1 x2 e]
+    else []
+  end.
+Lemma eppI_disjoint : forall D I,
+  ~ Actor.FSet.In D (Choreography.Insn.actors I) ->
+  eppI D I = [].
+Admitted.
+
+
+Inductive WFInsn : Choreography.Insn.t -> Prop :=
+| WFSend : forall A v B x,
+  A <> B -> WFInsn (Choreography.Insn.Send A v B x)
+| WFEPR : forall A x B y,
+  A <> B -> WFInsn (Choreography.Insn.EPR A x B y)
+| WFLet : forall A x e, WFInsn (Choreography.Insn.Let A x e)
+| WFLetBang : forall A x e, WFInsn (Choreography.Insn.LetBang A x e)
+| WFLetPair : forall A x1 x2 e, WFInsn (Choreography.Insn.LetPair A x1 x2 e)
+.
+
+
+
+Lemma dec_In : forall x X, 
+  { Actor.FSet.In x X } + { ~ Actor.FSet.In x X }.
+Admitted.
+
+
+Lemma EPP_cons : forall A I C PA,
+  WFInsn I ->
+  EPP A (I :: C) PA <->
+  exists PA', PA = eppI A I ++ PA' /\ EPP A C PA'.
+Proof.
+  intros A I C PA HI. split.
+  * intros  HEPPA.
+    inversion HEPPA; subst; clear HEPPA;
+    simpl; Actor.simplify; simpl;
+    try (eexists; split; eauto; fail).
+    rewrite eppI_disjoint; auto. simpl.
+    eexists. split; eauto.
+  * intros [PA' [? HEPPA]]; subst.
+    destruct (dec_In A (Choreography.Insn.actors I))
+      as [Hin | Hin].
+    2:{
+      rewrite eppI_disjoint; auto.
+      simpl.
+      apply EPP_disjoint; auto.
+    }
+    inversion HI; subst; clear HI; simpl in *;
+      Actor.simplify; simpl;
+      try(constructor; auto; fail).
+    destruct Hin; subst; try contradiction.
+    destruct Hin; subst; try contradiction.
+Qed.
+
+
+Inductive EPP_N_ : Choreography.t -> Network.t -> Prop :=
+| EPP_N_nil :
+  EPP_N_ [] (Actor.Map.empty _)
+| EPP_N_Send : forall I C N N',
+  EPP_N_ C N ->
+  WFInsn I ->
+
+  (forall A PA,
+    Actor.Map.MapsTo A PA N <->
+    Actor.Map.MapsTo A (eppI A I ++ PA) N'
+  ) ->
+
+  EPP_N_ (I :: C) N'
+.
+
+Lemma in_map_dec : forall {T} (A : Actor.t) (M : Actor.Map.t T),
+  { Actor.Map.In A M } + { ~ Actor.Map.In A M }.
+Admitted.
+
+Lemma EPP_N__spec : forall C N,
+  EPP_N_ C N <->
+  forall D PD, Actor.Map.MapsTo D PD N -> EPP D C PD.
+Proof.
+  intros C N. split.
+  * intros HEPP_N.
+    induction HEPP_N; intros D PD Hmapsto.
+    { exfalso. Actor.simplify. }
+    apply EPP_cons; auto.
+    destruct (in_map_dec D N) as [[PD' HPD'] | HPD'].
+    destruct (Actor.Map.find D N) as [PD' | ] eqn:HPD'.
+      2:{ admit. }
+      exists PD'.
+      specialize (H0 D PD').
+      repeat rewrite Actor.Map.Properties.F.find_mapsto_iff in H0.
+
+      rewrite H0 in HPD'.
+      Actor.reflect_find.
+      fold (Process.t) in HPD'.
+      rewrite Hmapsto in HPD'.
+      inversion HPD'; subst; clear HPD'.
+      split; auto.
+      apply IHHEPP_N.
+      Actor.reflect_find; auto.
+
 
 Lemma EPP_N_eq : forall N1 N2 C,
   Actor.Map.Equal N1 N2 ->
@@ -340,7 +459,7 @@ Proof.
       Actor.simplify.
       compare A D.
       {
-        exfalso. Actor.solve. discriminate.
+        exfalso. Actor.solve.
       }
       right. split; auto.
     }
@@ -937,76 +1056,9 @@ Global Instance setminusProper : forall T, Proper (Actor.FSet.Equal ==> @Actor.M
 Admitted.
 
 
-Lemma dec_In : forall x X, 
-  { Actor.FSet.In x X } + { ~ Actor.FSet.In x X }.
-Admitted.
 
-
-Definition eppI (D : Actor.t) (I : Choreography.Insn.t) : Process.t :=
-  match I with
-  | Choreography.Insn.Send A v B x =>
-    if Actor.eq_dec D A then [Insn.Send v B]
-    else if Actor.eq_dec D B then [Insn.Receive x A]
-    else []
-  | Choreography.Insn.EPR A x B y =>
-    if Actor.eq_dec D A then [Insn.EPR x B]
-    else if Actor.eq_dec D B then [Insn.EPR y A]
-    else []
-  | Choreography.Insn.Let A x e =>
-    if Actor.eq_dec D A then [Insn.Let x e]
-    else []
-  | Choreography.Insn.LetBang A x e =>
-    if Actor.eq_dec D A then [Insn.LetBang x e]
-    else []
-  | Choreography.Insn.LetPair A x1 x2 e =>
-    if Actor.eq_dec D A then [Insn.LetPair x1 x2 e]
-    else []
-  end.
-Lemma eppI_disjoint : forall D I,
-  ~ Actor.FSet.In D (Choreography.Insn.actors I) ->
-  eppI D I = [].
-Admitted.
 
 Print Choreography.Insn.t.
-
-Inductive WFInsn : Choreography.Insn.t -> Prop :=
-| WFSend : forall A v B x,
-  A <> B -> WFInsn (Choreography.Insn.Send A v B x)
-| WFEPR : forall A x B y,
-  A <> B -> WFInsn (Choreography.Insn.EPR A x B y)
-| WFLet : forall A x e, WFInsn (Choreography.Insn.Let A x e)
-| WFLetBang : forall A x e, WFInsn (Choreography.Insn.LetBang A x e)
-| WFLetPair : forall A x1 x2 e, WFInsn (Choreography.Insn.LetPair A x1 x2 e)
-.
-
-Lemma EPP_cons : forall A I C PA,
-  WFInsn I ->
-  EPP A (I :: C) PA <->
-  exists PA', PA = eppI A I ++ PA' /\ EPP A C PA'.
-Proof.
-  intros A I C PA HI. split.
-  * intros  HEPPA.
-    inversion HEPPA; subst; clear HEPPA;
-    simpl; Actor.simplify; simpl;
-    try (eexists; split; eauto; fail).
-    rewrite eppI_disjoint; auto. simpl.
-    eexists. split; eauto.
-  * intros [PA' [? HEPPA]]; subst.
-    destruct (dec_In A (Choreography.Insn.actors I))
-      as [Hin | Hin].
-    2:{
-      rewrite eppI_disjoint; auto.
-      simpl.
-      apply EPP_disjoint; auto.
-    }
-    inversion HI; subst; clear HI; simpl in *;
-      Actor.simplify; simpl;
-      try(constructor; auto; fail).
-    destruct Hin; subst; try contradiction.
-    destruct Hin; subst; try contradiction.
-Qed.
-
-About Actor.Map.fold.
 
   
 Definition unconsN (I : Choreography.Insn.t) (N : Network.t) : Network.t. Admitted.
