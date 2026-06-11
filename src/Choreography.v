@@ -616,6 +616,15 @@ Proof.
   Var.simplify.
 Qed.
 
+Lemma remove_dj_env : forall (CE1 CE2 : ChorEnv.t Expr.typ) A B x,
+    Var.Map.Properties.Disjoint (ChorEnv.find A CE1) (ChorEnv.find A CE2) -> 
+    Var.Map.Properties.Disjoint
+      (ChorEnv.find A (ChorEnv.remove B x CE1))
+      (ChorEnv.find A CE2).
+    
+Proof.
+Admitted.
+
 Lemma remove_add_dj_env : forall (CE1 CE2 : ChorEnv.t Expr.typ) A B x tau,
     Var.Map.Properties.Disjoint (ChorEnv.find A CE1) (ChorEnv.find A CE2) ->
     Var.Map.Properties.Disjoint
@@ -834,20 +843,6 @@ Proof.
   rewrite Var.Map.Proofs.add_neq_sym; auto.
   reflexivity.
 Qed.
-
-(*
-Lemma addadd7 : forall (CE : ChorEnv.t Expr.typ) A x tau1 y tau2 M,
-    x <> y -> 
-    ChorEnv.Equal
-      (Actor.Map.add A (Var.Map.add y tau2 M) (ChorEnv.add A x tau1 CE))
-      (ChorEnv.add A x tau1 (Actor.Map.add A (Var.Map.add y tau2 M) CE)).
-Proof.
-  intros.
-  rewrite addadd1.
-  unfold ChorEnv.add.
-  repeat (Actor.simplify; Var.simplify).
-Admitted.
-*)
 
 Lemma addadd8 : forall (CE : ChorEnv.t Expr.typ) A x tau M, 
     ChorEnv.Equal
@@ -1086,12 +1081,35 @@ Proof.
     rewrite (Var.Map.Proofs.concat_sym M0 M1); auto; try reflexivity.
 Qed.
 
-(* can we assume A <> B here? What if A = B and y is in M? *)
-Lemma map_subset_add : forall A B y tau (CE1 : ChorEnv.t Expr.typ) CE2 M,
-    Var.Map.Partition (ChorEnv.find A CE1) (ChorEnv.find A CE2) M ->
+Lemma map_partition_map : forall x tau (M : Var.Map.t Expr.typ) M1 M2,
+    Var.Map.MapsTo x tau M2 ->
+    Var.Map.Partition M M1 M2 ->
+    Var.Map.MapsTo x tau M.
+Proof.
+Admitted.
+
+Lemma readd_eq: forall A x tau (CE : ChorEnv.t Expr.typ),
+    Var.Map.MapsTo x tau (ChorEnv.find A CE) ->
+    ChorEnv.Equal (ChorEnv.add A x tau CE) CE.
+Proof.
+Admitted.
+
+Lemma remove_add_partition : forall (CE1 CE2 CE3: ChorEnv.t Expr.typ) A B x tau,
+    Var.Map.Partition (ChorEnv.find A CE1)
+      (ChorEnv.find A CE2) (ChorEnv.find A CE3) ->
+    Var.Map.MapsTo x tau (ChorEnv.find B CE1) ->
+    Var.Map.Partition (ChorEnv.find A CE1)
+      (ChorEnv.find A (ChorEnv.add B x tau CE2))
+      (ChorEnv.find A (ChorEnv.remove B x CE3)).
+Proof.
+Admitted.
+  
+Lemma map_subset_add : forall A B y tau (CE1 : ChorEnv.t Expr.typ) CE2 CE3,
+    ~ Var.Map.MapsTo y tau (ChorEnv.find B CE3) ->
+    Var.Map.Partition (ChorEnv.find A CE1) (ChorEnv.find A CE2) (ChorEnv.find A CE3) ->
     Var.Map.Partition
       (ChorEnv.find A (ChorEnv.add B y tau CE1))
-      (ChorEnv.find A (ChorEnv.add B y tau CE2)) M.
+      (ChorEnv.find A (ChorEnv.add B y tau CE2)) (ChorEnv.find A CE3).
 Proof.
   intros.
   Var.simplify.
@@ -1100,7 +1118,7 @@ Proof.
     admit (*??*).
 Admitted.
 
-Lemma add_MapsTo : forall A x (tau : A) m,
+Lemma add_mapsto : forall x (tau : Expr.typ) m,
     Var.Map.MapsTo x tau m ->
     Var.Map.Equal (Var.Map.add x tau m) m.
 Proof.
@@ -1408,6 +1426,7 @@ Proof.
         }
 Qed.
 
+
 Lemma weakening_gen : forall C G D T G0,
     WellTyped G D T C ->
     forall G',
@@ -1441,15 +1460,63 @@ Proof.
       eapply Send.     
       { auto. } 
       { eapply HEWG. }
-      { 
-        apply (IHC
-                 (ChorEnv.add B y tau G) (Actor.Map.add A DeltaA2 D)
-                 (Actor.Map.add A ThetaA2 T) G0 H9 (ChorEnv.add B y tau G')).       
-        intros A0.
-        destruct (HE A0) as [HEA0A HEA0B].
-        split.
-        { apply (map_subset_add A0 B y tau G' G (ChorEnv.find A0 G0) HEA0A). }
-        { apply (partition_dj_env A0 A G0 D DeltaA1 DeltaA2 HEA0B H10). }
+      {
+        assert (Var.Map.MapsTo y tau (ChorEnv.find B G0) \/
+                  ~ Var.Map.MapsTo y tau (ChorEnv.find B G0)) as HCasesByinG0.
+        tauto.
+        
+        destruct HCasesByinG0 as [HCasesByinG0L | HCasesByinG0R].
+        {
+          specialize (HE B) as HEBinG0.
+          destruct HEBinG0 as [HEBinG0A HEBinG0B].
+          pose proof (map_partition_map y tau
+                        (ChorEnv.find B G') (ChorEnv.find B G) (ChorEnv.find B G0)
+                        HCasesByinG0L
+                        HEBinG0A) as Hmpm.
+          rewrite (readd_eq B y tau G' Hmpm).
+          
+          apply (IHC
+                   (ChorEnv.add B y tau G) (Actor.Map.add A DeltaA2 D)
+                   (Actor.Map.add A ThetaA2 T) (ChorEnv.remove B y G0) H9 G').
+
+          intros A0.
+          destruct (HE A0) as [HEA0A HA0EB].
+
+          split.
+          {
+            apply (remove_add_partition G' G G0 A0 B y tau HEA0A Hmpm).
+          }
+          {
+            pose proof (remove_dj_env G0 D A0 B y HA0EB) as HG0Ddj.
+
+            assert (A0 = A \/ A0 <> A) as HeqA0A.
+            tauto.
+            destruct HeqA0A as [HeqA0AL | HeqA0AR].
+            {
+              rewrite HeqA0AL in *.
+              rewrite find_add.
+              pose proof (@Var.Map.Properties.Partition_sym _
+                            (ChorEnv.find A D) DeltaA1 DeltaA2 H10) as Hpart.
+              apply (partition_dj
+                       (ChorEnv.find A (ChorEnv.remove B y G0))
+                       (ChorEnv.find A D)
+                       DeltaA2 DeltaA1
+                       HG0Ddj Hpart).
+            }
+            { rewrite find_ab_neq2; auto. }
+
+          }
+        }
+        {
+          apply (IHC
+                   (ChorEnv.add B y tau G) (Actor.Map.add A DeltaA2 D)
+                   (Actor.Map.add A ThetaA2 T) G0 H9 (ChorEnv.add B y tau G')).       
+          intros A0.
+          destruct (HE A0) as [HEA0A HEA0B].
+          split.
+          { apply (map_subset_add A0 B y tau G' G G0 HCasesByinG0R HEA0A). }
+          { apply (partition_dj_env A0 A G0 D DeltaA1 DeltaA2 HEA0B H10). }
+        }
       }
       { auto. }
       { auto. }
@@ -1604,6 +1671,7 @@ Proof.
       { auto. }
       { auto. }
 Qed.
+
 
 Lemma wt_subst_bang : forall C tau G D T A x v,
     WellTyped (ChorEnv.add A x tau G) D T C ->
