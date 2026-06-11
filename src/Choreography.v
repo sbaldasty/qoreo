@@ -864,6 +864,13 @@ Proof.
   repeat (Actor.simplify; Var.simplify).
 Qed.
 
+Lemma remrem :  forall (CE : ChorEnv.t Expr.typ) A x y,
+    ChorEnv.Equal
+      (ChorEnv.remove A x (ChorEnv.remove A y CE))
+      (ChorEnv.remove A y (ChorEnv.remove A x CE)).      
+Proof.
+Admitted.
+
 Lemma rmadd1 : forall (CE : ChorEnv.t Expr.typ) A x tau,
     ChorEnv.Equal
       (ChorEnv.remove A x (ChorEnv.add A x tau CE))
@@ -2119,11 +2126,99 @@ Proof.
           
           {
             fold Choreography.subst.
-            unfold Insn.rebound_in.
+            destruct (Insn.rebound_in A x (Insn.LetPair A y z e)) eqn:Hrbi.
+            {
+              unfold Insn.rebound_in in Hrbi.
+              rewrite orb_true_iff in Hrbi.
+              destruct Hrbi as [HrbiA | HrbiB].
+              {
+                rewrite remrem.
+                rewrite remrem in H8.
+                destruct (beq A A x y) as [HbeqL _].
+                destruct (HbeqL HrbiA) as [_ Heqxy].
+                rewrite <- Heqxy in *.
+                rewrite rmadd1 in H8.
+                eauto.
+              }
+              {
+                destruct (beq A A x z) as [HbeqL _].
+                destruct (HbeqL HrbiB) as [_ Heqxz].
+                rewrite <- Heqxz in *.
+                rewrite rmadd1 in H8.
+                eauto.
+              }                
+            }
+            {
+              unfold Insn.rebound_in in Hrbi.
+              rewrite orb_false_iff in Hrbi.
+              destruct Hrbi as [HrbiA HrbiB].
 
-         
-           
-Admitted.
+              rewrite rmadd2 in H8; auto.
+              rewrite rmadd2 in H8; auto.
+               apply (IHC tau
+                        (ChorEnv.remove A y (ChorEnv.remove A z G))
+                        (Actor.Map.add A (Var.Map.add y tau1 (Var.Map.add z tau2 DeltaA2)) D)
+                        (Actor.Map.add A ThetaA2 T) 
+                        A x v H8 HWTV).
+            }
+          }
+
+          { auto. }
+          { auto. }
+          { auto. }
+          { auto. }
+        }
+        {
+          eapply LetPair; auto.
+
+           {
+             destruct (Actor.FSet.MF.eq_dec A A') eqn:Heq.
+             { contradiction. }
+             { 
+               rewrite find_ab_neq1 in H4; auto.
+               eauto.
+             }
+           }
+
+           {
+             fold Choreography.subst.
+             destruct (Insn.rebound_in A x (Insn.LetPair A' y z e)) eqn:Hrbi.
+             {
+               unfold Insn.rebound_in in Hrbi.
+               rewrite orb_true_iff in Hrbi.
+               destruct Hrbi as [HrbiA | HrbiB].
+               {
+                 destruct (beq A A' x y) as [HbeqL _].
+                 destruct (HbeqL HrbiA) as [HeqAB _].
+                 contradiction.
+               }
+               {
+                 destruct (beq A A' x z) as [HbeqL _].
+                 destruct (HbeqL HrbiB) as [HeqAB _].
+                 contradiction.                 
+               }
+             }
+             {
+               unfold Insn.rebound_in in Hrbi.
+               rewrite orb_false_iff in Hrbi.
+               destruct Hrbi as [HrbiA HrbiB].
+               {
+                 rewrite rmadd2 in H8; auto.
+                 rewrite rmadd2 in H8; auto.
+                 apply (IHC tau
+                          (ChorEnv.remove A' y (ChorEnv.remove A' z G))
+                          (Actor.Map.add A' (Var.Map.add y tau1 (Var.Map.add z tau2 DeltaA2)) D)
+                          (Actor.Map.add A' ThetaA2 T)
+                          A x v H8 HWTV).
+               }
+             }
+           }
+           { auto. }
+           { auto. }
+           { auto. }
+           { auto. }
+         }
+Qed.        
 
 (* replace with Expr.subst_not_in *)
 Lemma esubst : forall Gamma Delta Theta e x v tau,
