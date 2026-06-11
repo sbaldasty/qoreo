@@ -2635,11 +2635,11 @@ Proof.
           { symmetry. auto. }
           pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau H H10 HninD HDA'B) as Hnin.
           pose proof (subst_not_in
+                        C A x v
                         (ChorEnv.add B y tau0 G)
                         (Actor.Map.add A DeltaA2 D)
                         (Actor.Map.add A ThetaA3 T)
-                        C
-                        A x v H9) as HCSL.
+                        H9) as HCSL.
           rewrite -> (find_add A DeltaA2 D) in HCSL.
           destruct Hnin as [HninA HninB].
           
@@ -2914,11 +2914,11 @@ Proof.
           { symmetry. auto. }
           pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau H H8 HninD HDA'B) as Hnin.
           pose proof (subst_not_in
+                        C A x v
                         (ChorEnv.remove A y G)
                         (Actor.Map.add A  (Var.Map.add y tau0 DeltaA2) D)
                         (Actor.Map.add A ThetaA3 T)
-                        C
-                        A x v H7) as HCSL.
+                        H7) as HCSL.
           rewrite -> (find_add A (Var.Map.add y tau0 DeltaA2) D) in HCSL.
           destruct Hnin as [HninA HninB].
 
@@ -3147,11 +3147,11 @@ Proof.
              { eauto. }
              {
                pose proof (subst_not_in
+                             C A x v
                              (ChorEnv.add A y tau0 G)
                              (Actor.Map.add A DeltaA2 D)
                              (Actor.Map.add A ThetaA3 T)
-                             C
-                             A x v H7) as HCSL.
+                             H7) as HCSL.
                rewrite -> (find_add A DeltaA2 D) in HCSL.
                specialize (HCSL HninA (find_nbeq G A x A y tau0 Heq HninG)).
                rewrite -> HCSL.
@@ -3343,11 +3343,11 @@ Proof.
           { symmetry. auto. }
           pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau H H9 HninD HDA'B) as Hnin.
           pose proof (subst_not_in
+                        C A x v
                         (ChorEnv.remove A y (ChorEnv.remove A z G))
                         (Actor.Map.add A (Var.Map.add y tau1 (Var.Map.add z tau2 DeltaA2)) D)
                         (Actor.Map.add A ThetaA3 T)
-                        C
-                        A x v H8) as HCSL.
+                        H8) as HCSL.
           rewrite -> (find_add A (Var.Map.add y tau1 (Var.Map.add z tau2 DeltaA2)) D) in HCSL.
           destruct Hnin as [HninA HninB].
 
