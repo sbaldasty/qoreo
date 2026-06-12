@@ -3551,14 +3551,13 @@ Proof.
       }
 Qed.
 
-(* placeholder for well-formedness definition *)
-Definition  WellFormed (cfg : Config.t) (C : ChorEnv.t nat) : Prop := True.
+Definition  WellScoped (T : ChorEnv.t nat) (cfg : Config.t) : Prop :=
+  forall A, Config.WellScoped (ChorEnv.find A T) cfg.
 
-(* DISCUSS: well-formedness and presesvation of Expr.WellScoped? *)
 Theorem preservation : forall C1 T1 cfg1 l C2 T2 cfg2,
-  step C1 T1 cfg1 l C2 T2 cfg2 ->
-  WellFormed cfg1 T1 ->
-  WellTyped (Actor.Map.empty _) (Actor.Map.empty _) T1 C1 ->
-  WellFormed cfg2 T2 /\ WellTyped (Actor.Map.empty _) (Actor.Map.empty _) T2 C2.
+    WellTyped (Actor.Map.empty _) (Actor.Map.empty _) T1 C1 ->
+    step C1 T1 cfg1 l C2 T2 cfg2 ->
+    WellScoped T1 cfg1 ->
+    WellTyped (Actor.Map.empty _) (Actor.Map.empty _) T2 C2.
 Proof.
 Admitted.
