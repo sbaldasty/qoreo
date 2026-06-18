@@ -1290,28 +1290,6 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
         repeat rewrite <- concat_assoc
       end.
 
-      (*
-    Ltac partition_concat :=
-      match goal with
-      | [ |- Partition (concat ?m1 ?m2) ?m1 _ ] =>
-        reflect_partition;
-          [ | reflexivity];
-          vsimpl; auto with var_db
-
-      | [ |- Partition (concat ?m1 ?m2) ?m2 _ ] =>
-        reflect_partition;
-          [ | rewrite (concat_sym m1 m2); auto;
-              try reflexivity];
-          vsimpl; auto with var_db
-
-      | [ |- Partition _ (concat _ _) _ ] =>
-        reflect_partition; vsimpl; auto with var_db
-      | [ |- Partition _ _ (concat _ _) ] =>
-        reflect_partition; vsimpl; auto with var_db
-      end;
-      reduce_concat.
-      *)
-
     Ltac reduce_partition :=
       match goal with
 
@@ -1786,7 +1764,6 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       * intuition. inversion H0.
       * rewrite SetoidList.InA_cons.
         rewrite IHls.
-        Search MapsTo remove.
         rewrite F.remove_mapsto_iff.
         intuition.
     Qed.
@@ -1802,8 +1779,6 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       rewrite FSetProperties.elements_iff.
       reflexivity.
     Qed.
-    (*TODO*) #[global] Hint Rewrite @setminus_mapsto_iff : actor_db.
-
 
     Lemma removeA_eqlistA : forall ls A,
       ~ SetoidList.InA E.eq A ls ->
@@ -1847,9 +1822,7 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
           inversion Hin; subst; clear Hin;
             try contradiction.
           simpl.
-          Search (remove _ (remove _ _)).
           rewrite IHls; eauto.
-          Search Equal fold_left.
           apply foldProper''; try reflexivity.
           2:{
             intros ? ? Heq0 ? ? Heq0';
@@ -1977,8 +1950,6 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       Proofs.compare A A.
       reflexivity.
     Qed.
-    (*TODO*) #[global] Hint Rewrite setminus_add : actor_db.
-
 
     Lemma setminus_empty : forall T (M : t T),
       Equal (setminus FSet.empty M) M.
@@ -1996,7 +1967,7 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
         (setminus (FSet.singleton A) N)
         (M.remove A N).
     Proof.
-      intros. Search FSet.singleton.
+      intros.
       setoid_replace (FSet.singleton A)
         with (FSet.add A FSet.empty).
       2:{
@@ -2007,7 +1978,6 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
         intuition.
       }
       rewrite setminus_add.
-      Search FSet.remove FSet.empty.
       setoid_replace (FSet.remove A FSet.empty)
         with FSet.empty.
       2:{
@@ -2019,89 +1989,6 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       rewrite setminus_empty.
       reflexivity.
     Qed.
-    (*TODO*) #[global] Hint Rewrite setminus_singleton : actor_db.
-
-
-
-
-    (*
-    Lemma elements_remove : forall (X : FSet.t) A,
-      SetoidList.equivlistA E.eq
-        (FSet.elements (FSet.remove A X))
-        (@SetoidList.removeA _ _ E.eq_dec A (FSet.elements X)).
-    Proof.
-      intros X A.
-      intros z.
-      rewrite SetoidList.removeA_InA. 
-      2:{ Search Equivalence E.eq. exact FSetProperties.E_ST. }
-
-      remember (FSet.elements X) as ls eqn:Hls.
-      Search SetoidList.InA SetoidList.removeA.
-
-      rewrite fset_reflect.
-      remember (FSet.elements (FSet.remove A X)).
-      rewrite (fset_reflect X) at 2.
-      intros x.
-
-      remember (FSet.elements X) as ls eqn:Hls.
-      revert X Hls.
-      induction ls as [ | B ls]; intros X Hls A.
-      {
-        simpl.
-        apply elements_empty.
-
-        Search FSet.remove.
-        destruct X as [X Hok]. simpl in Hls.
-        inversion Hls; subst; auto.
-      }
-      simpl.
-
-      destruct X as [X Hok]. simpl in *.
-      inversion Hls; subst.
-      specialize (IHls (fset_of_elems ls)).
-      simpl.
-      destruct (Actor.Map.E.compare A B) eqn:Hcmp.
-
-      + compare A B.
-        {
-          exfalso. subst.
-          eapply (Actor.Map.Raw.MX.lt_antirefl); eauto.
-        }
-        f_equal.
-        rewrite removeA_not_in; auto.
-        eapply lts_not_in; eauto.
-        
-      + (* A = B *)
-
-        simpl. subst.
-        Actor.simplify.
-        rewrite SetoidList.removeA_filter.
-        rewrite List.forallb_filter_id; auto.
-        apply Actor.FSet.MSet.Raw.elements_spec2w in Hok.
-        unfold Actor.FSet.MSet.Raw.elements in Hok.
-        apply forallb_true.
-        intros D Hin.
-        compare B D; auto.
-        inversion Hok; subst; clear Hok.
-        exfalso. apply H2.
-        rewrite SetoidList.InA_alt.
-        exists B; split; auto.
-
-      + compare A B.
-        {
-          exfalso. subst.
-          eapply (Actor.Map.Raw.MX.lt_antirefl); eauto.
-        }
-        f_equal.
-        apply add_ok_inversion in Hok.
-        destruct Hok; auto.
-        rewrite <- IHls; auto.
-        2:{ rewrite elems_fset_of_elems; auto. }
-        rewrite elems_fset_of_elems; auto.
-    Qed.
-    *)
-
-
 
     (** Add *)
 
@@ -2118,7 +2005,6 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
         Proofs.compare x y; auto.
       { exfalso. apply Heq0. symmetry. auto. }
     Qed.
-    (*TODO*) #[global] Hint Rewrite add_mem_iff : var_db.
 
 
     Lemma singleton_mem_iff : forall x y,
@@ -2130,7 +2016,6 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       rewrite FSetProperties.singleton_b.
       auto.
     Qed.
-    (*TODO*) #[global] Hint Rewrite singleton_mem_iff : var_db.
 
 
 
@@ -2228,7 +2113,7 @@ Module Var.
   #[global] Existing Instance Map.Proofs.singletonProper.
   #[global] Existing Instance Map.Proofs.concatProper.
   #[global] Existing Instance Map.Proofs.domainProper.
-  #[global] Existing Instance Map.Proofs.setminusProper.
+  #[global] Existing Instance Map.FSetProofs.setminusProper.
 
   #[global] Hint Rewrite Map.Proofs.concat_find : var_db.
   #[global] Hint Rewrite Map.Proofs.concat_in : var_db.
@@ -2246,6 +2131,12 @@ Module Var.
   #[global] Hint Rewrite Map.Proofs.add_add_eq : var_db.
   #[global] Hint Rewrite Map.Proofs.singleton_empty : var_db.
   #[global] Hint Rewrite Map.Proofs.remove_remove : var_db.
+
+  #[global] Hint Rewrite @Map.FSetProofs.setminus_mapsto_iff : var_db.
+  #[global] Hint Rewrite Map.FSetProofs.setminus_add : var_db.
+  #[global] Hint Rewrite Map.FSetProofs.setminus_singleton : var_db.
+  #[global] Hint Rewrite Map.FSetProofs.add_mem_iff : var_db.
+  #[global] Hint Rewrite Map.FSetProofs.singleton_mem_iff : var_db.
 
   (* separate out more expensive resolves into extra_var_db *)
   #[global] Hint Resolve Map.empty_1 : var_db.  
@@ -2286,17 +2177,6 @@ Module Config.
     qstate : Matrix dim dim
   }.
 
-  (*
-  Module Refs.
-    Definition Partition cfg cfg1 cfg2 :=
-      Var.MapFacts.Partition (qrefs cfg) (qrefs cfg1) (qrefs cfg2).
-    Definition Singleton x cfg :=
-      Var.Map.In x (qrefs cfg) /\ Var.Map.cardinal (qrefs cfg) = 1%nat.
-    Definition Empty cfg :=
-      Var.Map.Empty (qrefs cfg).
-
-  End Refs.
-  *)
 
   Record WellScoped (refs : Var.Map.t nat) (cfg : t) := {
     wf_qstate : Matrix.WF_Matrix (qstate cfg);
@@ -2628,7 +2508,7 @@ Module Actor.
   #[global] Existing Instance Map.Proofs.singletonProper.
   #[global] Existing Instance Map.Proofs.concatProper.
   #[global] Existing Instance Map.Proofs.domainProper.
-  #[global] Existing Instance Map.Proofs.setminusProper.
+  #[global] Existing Instance Map.FSetProofs.setminusProper.
 
   #[global] Hint Rewrite Map.Proofs.concat_find : actor_db.
   #[global] Hint Rewrite Map.Proofs.concat_in : actor_db.
@@ -2647,6 +2527,12 @@ Module Actor.
   #[global] Hint Rewrite Map.Proofs.add_add_eq : actor_db.
   #[global] Hint Rewrite Map.Proofs.singleton_empty : actor_db.
   #[global] Hint Rewrite Map.Proofs.remove_remove : actor_db.
+
+  #[global] Hint Rewrite @Map.FSetProofs.setminus_mapsto_iff : actor_db.
+  #[global] Hint Rewrite Map.FSetProofs.setminus_add : actor_db.
+  #[global] Hint Rewrite Map.FSetProofs.setminus_singleton : actor_db.
+  #[global] Hint Rewrite Map.FSetProofs.add_mem_iff : actor_db.
+  #[global] Hint Rewrite Map.FSetProofs.singleton_mem_iff : actor_db.
 
   #[global] Hint Resolve Map.Proofs.add_mapsto : actor_db.
   #[global] Hint Resolve Map.Proofs.disjoint_empty_1 Map.Proofs.disjoint_empty_2 : actor_db.
