@@ -1532,7 +1532,14 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
     Global Instance removeA_Proper :
       Proper (E.eq ==> SetoidList.equivlistA E.eq ==> SetoidList.equivlistA E.eq)
         (SetoidList.removeA E.eq_dec).
-    Admitted.
+    Proof.
+      intros A1 A2 HA ls1 ls2 Hls z.
+      repeat rewrite SetoidList.removeA_InA.
+      rewrite HA.
+      rewrite Hls.
+      reflexivity.
+      all: apply FSetProperties.E_ST.
+    Qed.
 
 
     Lemma elements_cons_in : forall X B ls,
@@ -1548,9 +1555,18 @@ Module FMap_fun (E : OrderedType.OrderedType) (M : FMapInterface.Sfun E) (FSet :
       exists B. split; auto. reflexivity.
     Qed.
 
-    Lemma fset_of_elems_In_iff : forall A ls,
+    Lemma fset_of_elems_In_iff : forall ls A,
       FSet.In A (fset_of_elems ls) <-> SetoidList.InA E.eq A ls.
-    Admitted.
+    Proof.
+      induction ls as [ | B ls]; intros A; simpl.
+      * rewrite FSetProperties.elements_iff.
+        rewrite elements_empty.
+        reflexivity.
+      * rewrite FSetProperties.add_iff.
+        rewrite SetoidList.InA_cons.
+        rewrite IHls.
+        intuition.
+    Qed.
     
     Lemma remove_fset_of_elems : forall ls B,
       FSet.Equal (FSet.remove B (fset_of_elems ls))
@@ -2314,7 +2330,11 @@ Module ChorEnv.
     Lemma find_add' : forall {T} A B M (M' : t T),
       (find A (Actor.Map.add B M M'))
       = (if Actor.eq_dec A B then M else find A M').
-    Admitted.
+    Proof.
+      intros.
+      unfold find.
+      Actor.simplify.
+    Qed.
     #[global] Hint Rewrite @find_add' : var_db.
 
     Lemma find_remove : forall {T} A B x (G : t T),
@@ -2425,26 +2445,66 @@ Module ChorEnv.
 
     Global Instance Equal_symm : forall T, Symmetric (@Equal T).
     Proof.
-    Admitted.
+      intros T env1 env2 Heq.
+      unfold Equal in *.
+      unfold Actor.Map.Equiv in *.
+      destruct Heq as [Hin Hmapsto].
+      split.
+      * intros. symmetry. auto.
+      * intros. symmetry. apply (Hmapsto k e' e); auto.
+    Qed.
 
     Global Instance Equal_trans : forall T, Transitive (@Equal T).
     Proof.
-    Admitted.
+      intros T env1 env2 env3 [Hin Hmapsto] [Hin' Hmapsto'].
+      split.
+      * intros k. rewrite Hin. auto.
+      * intros k e e' H1 H3.
+        assert (Hin2 : Actor.Map.In k env2).
+        { apply Hin. exists e. auto. }
+        destruct Hin2 as [e2 Hmapsto2].
+        rewrite Hmapsto; eauto.
+    Qed.
 
     Global Instance actor_add_Proper : forall T, Proper (eq ==> @Var.Map.Equal T ==> Equal ==> @Equal T)
                                                         (@Actor.Map.add (Var.Map.t T)).
     Proof.
-      intros T ? A ? D1 D2 HD T1 T2 HT; subst.
-    Admitted.
+      intros T ? A ? D1 D2 HD T1 T2 [HT HT']; subst.
+      split.
+      * intros k. Actor.simplify. rewrite HT. reflexivity.
+      * intros B e1 e2 He1 He2.
+        Actor.simplify.
+        destruct He1 as [[? ?] | [? He1]];
+        destruct He2 as [[? ?] | [? He2]];
+        subst; try contradiction; auto.
+        (* A <> B *)
+        eapply HT'; eauto.
+    Qed.
 
     Lemma actor_map_Equal : forall T (M1 M2 : t T),
       Actor.Map.Equal M1 M2 -> Equal M1 M2.
-    Admitted.
-
+    Proof.
+      intros T M1 M2 Heq.
+      split.
+      * intros A. rewrite Heq. reflexivity.
+      * intros A D1 D2 HD1 HD2.
+        Actor.reflect_find.
+        rewrite Heq in HD1.
+        rewrite HD1 in HD2.
+        inversion HD2; clear HD2.
+        reflexivity.
+    Qed.
 
     Lemma actor_map_Equal' : forall T (M1 M2 N1 N2 : t T),
       Actor.Map.Equal M1 M2 -> Actor.Map.Equal N1 N2 -> Equal M1 N1 -> Equal M2 N2.
-    Admitted.
+    Proof.
+      intros T M1 M2 N1 N2 HeqM HeqN Heq.
+      apply actor_map_Equal in HeqM.
+      apply actor_map_Equal in HeqN.
+      rewrite <- HeqM.
+      rewrite <- HeqN.
+      auto.
+    Qed.
 
     Global Instance Equal_Proper : forall T, Proper (Actor.Map.Equal ==> Actor.Map.Equal ==> iff) (@Equal T).
     Proof.
