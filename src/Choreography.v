@@ -237,6 +237,7 @@ End Label.
 
 (** Semantics **)
 
+(** NOTE: I had to change the EPR rule to ensure that the label is unordered *)
 Inductive step : Choreography.t -> ChorEnv.t nat -> Config.t ->
                  Label.t ->
                  Choreography.t -> ChorEnv.t nat -> Config.t -> Prop :=
@@ -262,6 +263,15 @@ Inductive step : Choreography.t -> ChorEnv.t nat -> Config.t ->
 
     step  (Insn.EPR A x B y :: C) refs cfg
           (Label.EPR A B) 
+          C' refs' cfg'
+
+| EPRB' : forall q1 q2 A x B y C refs cfg C' refs' cfg',
+    ChorEnv.epr B A refs cfg = (q2, q1, refs', cfg') ->
+
+    C' = Choreography.subst A x (Expr.Var q1) (Choreography.subst B y (Expr.Var q2) C) ->
+
+    step  (Insn.EPR A x B y :: C) refs cfg
+          (Label.EPR B A) 
           C' refs' cfg'
 
 | LetC : forall refsA' A x e C refs cfg e' refs' cfg',
