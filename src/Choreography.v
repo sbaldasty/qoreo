@@ -238,6 +238,7 @@ End Label.
 (** Semantics **)
 
 (** NOTE: I had to change the EPR rule to ensure that the label is unordered *)
+(** NOTE: I also changed the beta rules so there is a refs' equal to refs, not syntactically equal *)
 Inductive step : Choreography.t -> ChorEnv.t nat -> Config.t ->
                  Label.t ->
                  Choreography.t -> ChorEnv.t nat -> Config.t -> Prop :=
@@ -249,15 +250,17 @@ Inductive step : Choreography.t -> ChorEnv.t nat -> Config.t ->
           (Label.Loc A)
           (Insn.Send A e' B x :: C) refs' cfg'
 
-| SendB : forall A v B x C refs cfg C',
+| SendB : forall A v B x C refs refs' cfg C',
     Expr.Val v ->
     C' = Choreography.subst B x v C ->
+    ChorEnv.Equal refs refs' ->
     step  (Insn.Send A v B x :: C) refs cfg
           (Label.Send A v B)
-          C' refs cfg
+          C' refs' cfg
 
-| EPRB : forall q1 q2 A x B y C refs cfg C' refs' cfg',
-    ChorEnv.epr A B refs cfg = (q1, q2, refs', cfg') ->
+| EPRB : forall q1 q2 A x B y C refs cfg C' refs' refs0 cfg',
+    ChorEnv.epr A B refs cfg = (q1, q2, refs0, cfg') ->
+    ChorEnv.Equal refs' refs0 ->
 
     C' = Choreography.subst A x (Expr.Var q1) (Choreography.subst B y (Expr.Var q2) C) ->
 
@@ -265,8 +268,9 @@ Inductive step : Choreography.t -> ChorEnv.t nat -> Config.t ->
           (Label.EPR A B) 
           C' refs' cfg'
 
-| EPRB' : forall q1 q2 A x B y C refs cfg C' refs' cfg',
-    ChorEnv.epr B A refs cfg = (q2, q1, refs', cfg') ->
+| EPRB' : forall q1 q2 A x B y C refs cfg C' refs' refs0 cfg',
+    ChorEnv.epr B A refs cfg = (q2, q1, refs0, cfg') ->
+    ChorEnv.Equal refs' refs0 ->
 
     C' = Choreography.subst A x (Expr.Var q1) (Choreography.subst B y (Expr.Var q2) C) ->
 
@@ -283,12 +287,13 @@ Inductive step : Choreography.t -> ChorEnv.t nat -> Config.t ->
           (Label.Loc A)
           (Insn.Let A x e' :: C) refs' cfg'
 
-| LetB : forall A x v C refs cfg C',
+| LetB : forall A x v C refs refs' cfg C',
     Expr.Val v ->
     C' = Choreography.subst A x v C ->
+    ChorEnv.Equal refs refs' ->
     step  (Insn.Let A x v :: C) refs cfg
           (Label.Loc A)
-          C' refs cfg
+          C' refs' cfg
 
 | LetBangC : forall refsA' A x e C refs cfg e' refs' cfg',
     Expr.step e (ChorEnv.find A refs) cfg e' refsA' cfg' ->
@@ -297,11 +302,12 @@ Inductive step : Choreography.t -> ChorEnv.t nat -> Config.t ->
           (Label.Loc A)
           (Insn.LetBang A x e' :: C) refs' cfg'
 
-| LetBangB : forall A x e0 C refs cfg C',
+| LetBangB : forall A x e0 C refs refs' cfg C',
     C' = Choreography.subst A x e0 C ->
+    ChorEnv.Equal refs' refs ->
     step  (Insn.LetBang A x (Expr.Bang e0) :: C) refs cfg
           (Label.Loc A)
-          C' refs cfg
+          C' refs' cfg
 
 | LetPairC : forall refsA' A x1 x2 e C refs cfg e' refs' cfg',
     Expr.step e (ChorEnv.find A refs) cfg e' refsA' cfg' ->
@@ -311,12 +317,13 @@ Inductive step : Choreography.t -> ChorEnv.t nat -> Config.t ->
           (Label.Loc A)
           (Insn.LetPair A x1 x2 e' :: C) refs' cfg'
 
-| LetPairB : forall A x1 x2 v1 v2 C refs cfg C',
+| LetPairB : forall A x1 x2 v1 v2 C refs refs' cfg C',
     Expr.Val v1 -> Expr.Val v2 ->
     C' = Choreography.subst A x1 v1 (Choreography.subst A x2 v2 C) ->
+    ChorEnv.Equal refs' refs ->
     step  (Insn.LetPair A x1 x2 (Expr.Pair v1 v2) :: C) refs cfg
           (Label.Loc A) 
-          C' refs cfg
+          C' refs' cfg
 
 (* delay *)
 | Delay : forall I C refs cfg C' refs' cfg' l,
