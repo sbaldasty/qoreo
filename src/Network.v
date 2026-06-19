@@ -870,6 +870,12 @@ Proof.
   intuition.
 Qed.
 
+Lemma chor_epr_eq : forall T2 T1 T1' A B cfg cfg' q1 q2,
+  ChorEnv.epr A B T1 cfg = (q1, q2, T1', cfg') ->
+  ChorEnv.Equal T1 T2 ->
+  exists T2', ChorEnv.Equal T2' T1' /\ ChorEnv.epr A B T2 cfg = (q1, q2, T2', cfg').
+Admitted.
+
 (* TODO: move to Choreography.v *)
 Lemma epr_Proper : Proper (eq ==> eq ==> ChorEnv.Equal ==> eq ==> RelationPairs.RelProd (RelationPairs.RelProd eq ChorEnv.Equal) eq) ChorEnv.epr.
 Proof.
@@ -888,82 +894,26 @@ Lemma chor_step_Proper' : forall C Θ1 cfg l C' Θ1' cfg',
     Choreography.step C Θ2 cfg l C' Θ2' cfg'.
 Proof.
   intros ? ? ? ? ? ? ? Hstep.
-  induction Hstep; intros Θ2 Θ2' Heq Heq'.
-  * econstructor; eauto;
-    try rewrite <- Heq;
-    try rewrite <- Heq'; eauto.
-  * econstructor; eauto;
-    try rewrite <- Heq;
-    try rewrite <- Heq'; eauto.
-  * 
-    rewrite Heq' in H0. clear refs' Heq'.
+  induction Hstep; intros Θ2 Θ2' Heq Heq';
+    try rewrite Heq in *;
+    try rewrite Heq' in *;
+    try (econstructor; eauto; fail).
+  (* only EPR cases left *)
+  * subst.
 
-    inversion H; subst; clear H.
-    eapply Choreography.EPRB.
-    3:{ eauto. }
-    + unfold ChorEnv.epr.
-      destruct (Config.epr_cfg cfg) as [[pA pB] cfg'] eqn:Hcfg.
-      unfold Config.epr_cfg in Hcfg.
-      inversion Hcfg; subst; clear Hcfg.
-      f_equal.
-      match goal with
-      | [ |- (?e1, ?e2) = (?e1', ?e2') ] =>
-        replace e1 with e1';
-        [replace e2 with e2'; try reflexivity | ]
-      end.
-      rewrite <- Heq.
-      reflexivity.
+    apply (chor_epr_eq Θ2) in H; auto.
+    destruct H as [T0' [Heq'' H]].
 
-    + rewrite <- Heq.
-      auto.
+    apply (Choreography.EPRB q1 q2 T0'); auto.
+    { rewrite H0. rewrite Heq''. reflexivity. }
 
-  *
-    rewrite Heq' in H0. clear refs' Heq'.
+  * apply (chor_epr_eq Θ2) in H; auto.
+    destruct H as [T0' [Heq'' H]].
 
-    inversion H; subst; clear H.
-    eapply Choreography.EPRB'.
-    3:{ eauto. }
-    + unfold ChorEnv.epr.
-      destruct (Config.epr_cfg cfg) as [[pA pB] cfg'] eqn:Hcfg.
-      unfold Config.epr_cfg in Hcfg.
-      inversion Hcfg; subst; clear Hcfg.
-      f_equal.
-      match goal with
-      | [ |- (?e1, ?e2) = (?e1', ?e2') ] =>
-        replace e1 with e1';
-        [replace e2 with e2'; try reflexivity | ]
-      end.
-      rewrite <- Heq.
-      reflexivity.
-
-    + rewrite <- Heq.
-      auto.
-
-  * rewrite Heq in *.
-    rewrite Heq' in *.
-    econstructor; eauto.
-
-  * rewrite Heq in *.
-    rewrite Heq' in *.
-    econstructor; eauto.
-
-  * rewrite Heq in *.
-    rewrite Heq' in *.
-    econstructor; eauto.
-
-  * rewrite Heq in *.
-    rewrite Heq' in *.
-    econstructor; eauto.
-
-  * rewrite Heq in *.
-    rewrite Heq' in *.
-    econstructor; eauto.
-
-  * rewrite Heq in *.
-    rewrite Heq' in *.
-    econstructor; eauto.
-
-  * econstructor; eauto.
+    apply (Choreography.EPRB' q1 q2 T0'); auto.
+    {
+      rewrite H0. rewrite Heq''. reflexivity.
+    }
 Qed.
 
 Global Instance chor_step_Proper : Proper (eq ==> ChorEnv.Equal ==> eq ==> eq ==> eq ==> ChorEnv.Equal ==> eq ==> iff) (Choreography.step).
@@ -1151,6 +1101,7 @@ Proof.
     rewrite Hls.
     reflexivity.
   }
+
   compare A B.
   {
     set (Hyp := fold_uncons_mapsto_neq (Actor.FSet.remove A X) A PA (uncons A N)).
