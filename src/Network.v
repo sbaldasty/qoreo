@@ -1104,21 +1104,6 @@ Proof.
 Qed.
 
 
-Lemma actor_equivlistA_eq : forall (ls1 ls2 : list Actor.t),
-  Sorted.Sorted OrderedTypeEx.String_as_OT.lts ls1 ->
-  Sorted.Sorted OrderedTypeEx.String_as_OT.lts ls2 ->
-  SetoidList.NoDupA eq ls1 ->
-  SetoidList.NoDupA eq ls2 ->
-  SetoidList.equivlistA eq ls1 ls2 <-> ls1 = ls2.
-Proof.
-  intros ls1 ls2 Hsorted1 Hsorted2 Hdup1 Hdup2.
-  split.
-  * intros Heq. unfold SetoidList.equivlistA in Heq.
-    admit.
-  * intros. subst. reflexivity.
-Admitted.
-
-
 Lemma fold_uncons_mapsto_eq : forall N A PA X,
   Actor.FSet.In A X ->
   Actor.Map.MapsTo A PA (Actor.FSet.fold uncons X N) <->
@@ -1146,10 +1131,8 @@ Proof.
   simpl.
   symmetry in Hls.
 
-  
-
   (*assert (Hremove : SetoidList.equivlistA eq (Actor.FSet.elements (Actor.FSet.remove B X)) ls).*)
-  assert (Hremove : Actor.FSet.elements (Actor.FSet.remove B X) = ls).
+  assert (Hremove : SetoidList.eqlistA eq (Actor.FSet.elements (Actor.FSet.remove B X)) ls).
   {
     set (Hsort := Actor.FSet.elements_3 X).
     rewrite Hls in Hsort.
@@ -1158,9 +1141,11 @@ Proof.
     rewrite Hls in Hdup.
     inversion Hdup; subst; clear Hdup.
 
-    apply actor_equivlistA_eq; auto.
+    eapply SetoidList.SortA_equivlistA_eqlistA; eauto.
+    { apply Actor.FSet.MSet.E.lt_strorder. }
+    { apply Actor.FSet.MSet.E.lt_compat. }
+
     { apply Actor.FSet.elements_3. }
-    { apply Actor.FSet.elements_3w. }
 
     apply Actor.Map.FSetProofs.elements_cons_remove; auto.
     rewrite Hls.
