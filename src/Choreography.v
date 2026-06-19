@@ -633,6 +633,15 @@ Proof.
   Var.simplify.
 Qed.
 
+Lemma remove_dj_env : forall (CE1 CE2 : ChorEnv.t Expr.typ) A B x,
+    Var.Map.Properties.Disjoint (ChorEnv.find A CE1) (ChorEnv.find A CE2) -> 
+    Var.Map.Properties.Disjoint
+      (ChorEnv.find A (ChorEnv.remove B x CE1))
+      (ChorEnv.find A CE2).
+    
+Proof.
+Admitted.
+
 Lemma remove_add_dj_env : forall (CE1 CE2 : ChorEnv.t Expr.typ) A B x tau,
     Var.Map.Properties.Disjoint (ChorEnv.find A CE1) (ChorEnv.find A CE2) ->
     Var.Map.Properties.Disjoint
@@ -748,6 +757,13 @@ Proof.
   Var.simplify.
 Qed.
 
+Lemma nin_partition : forall x (M M1 M2 : Var.Map.t Expr.typ),
+    ~ Var.Map.In x M ->
+    Var.Map.Partition M M1 M2 ->
+    ~ Var.Map.In x M1.
+Proof.
+Admitted.
+
 Lemma partition_remove_all : forall (CE1 : ChorEnv.t Expr.typ) CE2 CE3 A B x,
     Var.Map.Partition (ChorEnv.find A CE1) (ChorEnv.find A CE2) (ChorEnv.find A CE3) ->
     Var.Map.Partition (ChorEnv.find A (ChorEnv.remove B x CE1))
@@ -852,20 +868,6 @@ Proof.
   reflexivity.
 Qed.
 
-(*
-Lemma addadd7 : forall (CE : ChorEnv.t Expr.typ) A x tau1 y tau2 M,
-    x <> y -> 
-    ChorEnv.Equal
-      (Actor.Map.add A (Var.Map.add y tau2 M) (ChorEnv.add A x tau1 CE))
-      (ChorEnv.add A x tau1 (Actor.Map.add A (Var.Map.add y tau2 M) CE)).
-Proof.
-  intros.
-  rewrite addadd1.
-  unfold ChorEnv.add.
-  repeat (Actor.simplify; Var.simplify).
-Admitted.
-*)
-
 Lemma addadd8 : forall (CE : ChorEnv.t Expr.typ) A x tau M, 
     ChorEnv.Equal
       (Actor.Map.add A (Var.Map.add x tau M) CE)
@@ -885,6 +887,13 @@ Proof.
   unfold ChorEnv.add.
   repeat (Actor.simplify; Var.simplify).
 Qed.
+
+Lemma remrem :  forall (CE : ChorEnv.t Expr.typ) A x y,
+    ChorEnv.Equal
+      (ChorEnv.remove A x (ChorEnv.remove A y CE))
+      (ChorEnv.remove A y (ChorEnv.remove A x CE)).      
+Proof.
+Admitted.
 
 Lemma rmadd1 : forall (CE : ChorEnv.t Expr.typ) A x tau,
     ChorEnv.Equal
@@ -1103,12 +1112,35 @@ Proof.
     rewrite (Var.Map.Proofs.concat_sym M0 M1); auto; try reflexivity.
 Qed.
 
-(* can we assume A <> B here? What if A = B and y is in M? *)
-Lemma map_subset_add : forall A B y tau (CE1 : ChorEnv.t Expr.typ) CE2 M,
-    Var.Map.Partition (ChorEnv.find A CE1) (ChorEnv.find A CE2) M ->
+Lemma map_partition_map : forall x tau (M : Var.Map.t Expr.typ) M1 M2,
+    Var.Map.MapsTo x tau M2 ->
+    Var.Map.Partition M M1 M2 ->
+    Var.Map.MapsTo x tau M.
+Proof.
+Admitted.
+
+Lemma readd_eq: forall A x tau (CE : ChorEnv.t Expr.typ),
+    Var.Map.MapsTo x tau (ChorEnv.find A CE) ->
+    ChorEnv.Equal (ChorEnv.add A x tau CE) CE.
+Proof.
+Admitted.
+
+Lemma remove_add_partition : forall (CE1 CE2 CE3: ChorEnv.t Expr.typ) A B x tau,
+    Var.Map.Partition (ChorEnv.find A CE1)
+      (ChorEnv.find A CE2) (ChorEnv.find A CE3) ->
+    Var.Map.MapsTo x tau (ChorEnv.find B CE1) ->
+    Var.Map.Partition (ChorEnv.find A CE1)
+      (ChorEnv.find A (ChorEnv.add B x tau CE2))
+      (ChorEnv.find A (ChorEnv.remove B x CE3)).
+Proof.
+Admitted.
+  
+Lemma map_subset_add : forall A B y tau (CE1 : ChorEnv.t Expr.typ) CE2 CE3,
+    ~ Var.Map.MapsTo y tau (ChorEnv.find B CE3) ->
+    Var.Map.Partition (ChorEnv.find A CE1) (ChorEnv.find A CE2) (ChorEnv.find A CE3) ->
     Var.Map.Partition
       (ChorEnv.find A (ChorEnv.add B y tau CE1))
-      (ChorEnv.find A (ChorEnv.add B y tau CE2)) M.
+      (ChorEnv.find A (ChorEnv.add B y tau CE2)) (ChorEnv.find A CE3).
 Proof.
   intros.
   Var.simplify.
@@ -1117,7 +1149,7 @@ Proof.
     admit (*??*).
 Admitted.
 
-Lemma add_MapsTo : forall A x (tau : A) m,
+Lemma add_mapsto : forall x (tau : Expr.typ) m,
     Var.Map.MapsTo x tau m ->
     Var.Map.Equal (Var.Map.add x tau m) m.
 Proof.
@@ -1425,6 +1457,7 @@ Proof.
         }
 Qed.
 
+
 Lemma weakening_gen : forall C G D T G0,
     WellTyped G D T C ->
     forall G',
@@ -1458,15 +1491,63 @@ Proof.
       eapply Send.     
       { auto. } 
       { eapply HEWG. }
-      { 
-        apply (IHC
-                 (ChorEnv.add B y tau G) (Actor.Map.add A DeltaA2 D)
-                 (Actor.Map.add A ThetaA2 T) G0 H9 (ChorEnv.add B y tau G')).       
-        intros A0.
-        destruct (HE A0) as [HEA0A HEA0B].
-        split.
-        { apply (map_subset_add A0 B y tau G' G (ChorEnv.find A0 G0) HEA0A). }
-        { apply (partition_dj_env A0 A G0 D DeltaA1 DeltaA2 HEA0B H10). }
+      {
+        assert (Var.Map.MapsTo y tau (ChorEnv.find B G0) \/
+                  ~ Var.Map.MapsTo y tau (ChorEnv.find B G0)) as HCasesByinG0.
+        tauto.
+        
+        destruct HCasesByinG0 as [HCasesByinG0L | HCasesByinG0R].
+        {
+          specialize (HE B) as HEBinG0.
+          destruct HEBinG0 as [HEBinG0A HEBinG0B].
+          pose proof (map_partition_map y tau
+                        (ChorEnv.find B G') (ChorEnv.find B G) (ChorEnv.find B G0)
+                        HCasesByinG0L
+                        HEBinG0A) as Hmpm.
+          rewrite (readd_eq B y tau G' Hmpm).
+          
+          apply (IHC
+                   (ChorEnv.add B y tau G) (Actor.Map.add A DeltaA2 D)
+                   (Actor.Map.add A ThetaA2 T) (ChorEnv.remove B y G0) H9 G').
+
+          intros A0.
+          destruct (HE A0) as [HEA0A HA0EB].
+
+          split.
+          {
+            apply (remove_add_partition G' G G0 A0 B y tau HEA0A Hmpm).
+          }
+          {
+            pose proof (remove_dj_env G0 D A0 B y HA0EB) as HG0Ddj.
+
+            assert (A0 = A \/ A0 <> A) as HeqA0A.
+            tauto.
+            destruct HeqA0A as [HeqA0AL | HeqA0AR].
+            {
+              rewrite HeqA0AL in *.
+              rewrite find_add.
+              pose proof (@Var.Map.Properties.Partition_sym _
+                            (ChorEnv.find A D) DeltaA1 DeltaA2 H10) as Hpart.
+              apply (partition_dj
+                       (ChorEnv.find A (ChorEnv.remove B y G0))
+                       (ChorEnv.find A D)
+                       DeltaA2 DeltaA1
+                       HG0Ddj Hpart).
+            }
+            { rewrite find_ab_neq2; auto. }
+
+          }
+        }
+        {
+          apply (IHC
+                   (ChorEnv.add B y tau G) (Actor.Map.add A DeltaA2 D)
+                   (Actor.Map.add A ThetaA2 T) G0 H9 (ChorEnv.add B y tau G')).       
+          intros A0.
+          destruct (HE A0) as [HEA0A HEA0B].
+          split.
+          { apply (map_subset_add A0 B y tau G' G G0 HCasesByinG0R HEA0A). }
+          { apply (partition_dj_env A0 A G0 D DeltaA1 DeltaA2 HEA0B H10). }
+        }
       }
       { auto. }
       { auto. }
@@ -1556,19 +1637,67 @@ Proof.
 
       eapply LetBang.     
       { eauto. } 
-      { 
-        apply (IHC
-                 (ChorEnv.add A y tau G) (Actor.Map.add A DeltaA2 D)
-                 (Actor.Map.add A ThetaA2 T) G0 H7 (ChorEnv.add A y tau G')).       
-        intros A0.
-        destruct (HE A0) as [HEA0A HEA0B].
-        split.
-        { apply (map_subset_add A0 A y tau G' G (ChorEnv.find A0 G0) HEA0A). }
-        { apply (partition_dj_env A0 A G0 D DeltaA1 DeltaA2 HEA0B H8). }
+      {
+        assert (Var.Map.MapsTo y tau (ChorEnv.find A G0) \/
+                  ~ Var.Map.MapsTo y tau (ChorEnv.find A G0)) as HCasesAyinG0.
+        tauto.
+        
+        destruct HCasesAyinG0 as [HCasesAyinG0L | HCasesAyinG0R].
+        {
+          specialize (HE A) as HEAinG0.
+          destruct HEAinG0 as [HEAinG0A HEAinG0B].
+          pose proof (map_partition_map y tau
+                        (ChorEnv.find A G') (ChorEnv.find A G) (ChorEnv.find A G0)
+                        HCasesAyinG0L
+                        HEAinG0A) as Hmpm.
+          rewrite (readd_eq A y tau G' Hmpm).
+          
+          apply (IHC
+                   (ChorEnv.add A y tau G) (Actor.Map.add A DeltaA2 D)
+                   (Actor.Map.add A ThetaA2 T) (ChorEnv.remove A y G0) H7 G').
+
+          intros A0.
+          destruct (HE A0) as [HEA0A HA0EB].
+          split.
+          {
+            apply (remove_add_partition G' G G0 A0 A y tau HEA0A Hmpm).
+          }
+          {
+            pose proof (remove_dj_env G0 D A0 A y HA0EB) as HG0Ddj.
+
+            assert (A0 = A \/ A0 <> A) as HeqA0A.
+            tauto.
+            destruct HeqA0A as [HeqA0AL | HeqA0AR].
+            {
+              rewrite HeqA0AL in *.
+              rewrite find_add.
+              pose proof (@Var.Map.Properties.Partition_sym _
+                            (ChorEnv.find A D) DeltaA1 DeltaA2 H8) as Hpart.
+              apply (partition_dj
+                       (ChorEnv.find A (ChorEnv.remove A y G0))
+                       (ChorEnv.find A D)
+                       DeltaA2 DeltaA1
+                       HG0Ddj Hpart).
+            }
+            { rewrite find_ab_neq2; auto. }
+          }
+        }
+        {
+          apply (IHC
+                   (ChorEnv.add A y tau G) (Actor.Map.add A DeltaA2 D)
+                   (Actor.Map.add A ThetaA2 T) G0 H7 (ChorEnv.add A y tau G')).       
+          intros A0.
+          destruct (HE A0) as [HEA0A HEA0B].
+          split.
+          { apply (map_subset_add A0 A y tau G' G G0 HCasesAyinG0R HEA0A). }
+          { apply (partition_dj_env A0 A G0 D DeltaA1 DeltaA2 HEA0B H8). }
+        }
       }
-      { auto. }
+   
       { auto. }
 
+      { auto. }
+      
     (* Case LetPair *)
     + intros G D T G0 HWT G' HE.
       inversion HWT; subst.
@@ -1621,6 +1750,7 @@ Proof.
       { auto. }
       { auto. }
 Qed.
+
 
 Lemma wt_subst_bang : forall C tau G D T A x v,
     WellTyped (ChorEnv.add A x tau G) D T C ->
@@ -2020,28 +2150,440 @@ Proof.
           
           {
             fold Choreography.subst.
-            unfold Insn.rebound_in.
+            destruct (Insn.rebound_in A x (Insn.LetPair A y z e)) eqn:Hrbi.
+            {
+              unfold Insn.rebound_in in Hrbi.
+              rewrite orb_true_iff in Hrbi.
+              destruct Hrbi as [HrbiA | HrbiB].
+              {
+                rewrite remrem.
+                rewrite remrem in H8.
+                destruct (beq A A x y) as [HbeqL _].
+                destruct (HbeqL HrbiA) as [_ Heqxy].
+                rewrite <- Heqxy in *.
+                rewrite rmadd1 in H8.
+                eauto.
+              }
+              {
+                destruct (beq A A x z) as [HbeqL _].
+                destruct (HbeqL HrbiB) as [_ Heqxz].
+                rewrite <- Heqxz in *.
+                rewrite rmadd1 in H8.
+                eauto.
+              }                
+            }
+            {
+              unfold Insn.rebound_in in Hrbi.
+              rewrite orb_false_iff in Hrbi.
+              destruct Hrbi as [HrbiA HrbiB].
 
-         
-           
-Admitted.
+              rewrite rmadd2 in H8; auto.
+              rewrite rmadd2 in H8; auto.
+               apply (IHC tau
+                        (ChorEnv.remove A y (ChorEnv.remove A z G))
+                        (Actor.Map.add A (Var.Map.add y tau1 (Var.Map.add z tau2 DeltaA2)) D)
+                        (Actor.Map.add A ThetaA2 T) 
+                        A x v H8 HWTV).
+            }
+          }
 
-(* replace with Expr.subst_not_in *)
-Lemma esubst : forall Gamma Delta Theta e x v tau,
-    Expr.WellTyped Gamma Delta Theta e tau ->
-    ~ Var.Map.In x Gamma -> 
-    ~ Var.Map.In x Delta -> 
-    (Expr.subst x v e) = e.
-Proof.
-Admitted.
+          { auto. }
+          { auto. }
+          { auto. }
+          { auto. }
+        }
+        {
+          eapply LetPair; auto.
 
-Lemma csubst : forall G D T C A x v,
+           {
+             destruct (Actor.FSet.MF.eq_dec A A') eqn:Heq.
+             { contradiction. }
+             { 
+               rewrite find_ab_neq1 in H4; auto.
+               eauto.
+             }
+           }
+
+           {
+             fold Choreography.subst.
+             destruct (Insn.rebound_in A x (Insn.LetPair A' y z e)) eqn:Hrbi.
+             {
+               unfold Insn.rebound_in in Hrbi.
+               rewrite orb_true_iff in Hrbi.
+               destruct Hrbi as [HrbiA | HrbiB].
+               {
+                 destruct (beq A A' x y) as [HbeqL _].
+                 destruct (HbeqL HrbiA) as [HeqAB _].
+                 contradiction.
+               }
+               {
+                 destruct (beq A A' x z) as [HbeqL _].
+                 destruct (HbeqL HrbiB) as [HeqAB _].
+                 contradiction.                 
+               }
+             }
+             {
+               unfold Insn.rebound_in in Hrbi.
+               rewrite orb_false_iff in Hrbi.
+               destruct Hrbi as [HrbiA HrbiB].
+               {
+                 rewrite rmadd2 in H8; auto.
+                 rewrite rmadd2 in H8; auto.
+                 apply (IHC tau
+                          (ChorEnv.remove A' y (ChorEnv.remove A' z G))
+                          (Actor.Map.add A' (Var.Map.add y tau1 (Var.Map.add z tau2 DeltaA2)) D)
+                          (Actor.Map.add A' ThetaA2 T)
+                          A x v H8 HWTV).
+               }
+             }
+           }
+           { auto. }
+           { auto. }
+           { auto. }
+           { auto. }
+         }
+Qed.        
+
+Lemma subst_not_in : forall C A x v G D T,
     WellTyped G D T C ->
     ~ (Var.Map.In x (ChorEnv.find A D)) ->
     ~ (Var.Map.In x (ChorEnv.find A G)) ->
     (Choreography.subst A x v C) = C.
 Proof.
-Admitted.
+  intros C A x v. 
+
+  induction C as [| I C].
+
+  - intros G D T HWTC HninD HninG.
+    simpl; auto.
+
+  - intros G D T HWTC HninD HninG.
+    destruct I as [ A' e B y | A' y B z | A' y e | A' y e | A' y z e ].
+
+    (* Case Send *)
+    + inversion HWTC; subst.
+      unfold Choreography.subst.
+      fold Choreography.subst.
+      unfold Insn.subst.
+
+      assert
+        ((if Actor.FSet.MF.eq_dec A A' then Expr.subst x v e else e) = e) as Hgoale.
+      {
+        destruct (Actor.FSet.MF.eq_dec A A') eqn:Heq.
+        {
+          subst.
+
+          apply(Expr.subst_not_in e x v 
+                  (ChorEnv.find A' G) DeltaA1 ThetaA1 (Expr.BANG tau)
+                  H8 HninG
+                  (nin_partition x (ChorEnv.find A' D) DeltaA1 DeltaA2 HninD H10)).
+        }
+        { auto. }
+      }
+
+      assert
+        ((if Insn.rebound_in A x (Insn.Send A' e B y) then C else Choreography.subst A x v C) = C) as HgoalC.
+      {
+        unfold Insn.rebound_in.
+        destruct (Insn.bind_eqb (A, x) (B, y)) eqn:Hbeq.
+        {
+          setoid_rewrite Hbeq.
+          auto.
+        }
+        {
+          setoid_rewrite Hbeq.
+
+          specialize (IHC
+                        (ChorEnv.add B y tau G)
+                        (Actor.Map.add A' DeltaA2 D)
+                        (Actor.Map.add A' ThetaA2 T)
+                        H9).
+
+          pose proof (find_nbeq G A x B y tau Hbeq HninG) as Hnbeq.
+
+          assert (~ Var.Map.In x (ChorEnv.find A (Actor.Map.add A' DeltaA2 D))) as HninDadd.
+          {
+            assert (A = A' \/ A <> A') as HAA'eq.
+            tauto.
+            destruct HAA'eq as [HAA'eqL |  HAA'eqR].
+            {
+              rewrite <- HAA'eqL in *.
+              rewrite find_add; auto.
+              pose proof (@Var.Map.Properties.Partition_sym _
+                            (ChorEnv.find A D) DeltaA1 DeltaA2 H10) as Hpart.
+              apply (nin_partition x (ChorEnv.find A D) DeltaA2 DeltaA1 HninD Hpart).
+            }
+            {
+              rewrite (find_ab_neq2 A A' DeltaA2 D HAA'eqR).
+              auto.
+            }
+          }
+
+          apply (IHC HninDadd Hnbeq).
+        }
+      }
+      
+      setoid_rewrite Hgoale.
+      setoid_rewrite HgoalC.
+      auto.
+
+    (* Case EPR *)
+    + inversion HWTC; subst.
+      unfold Choreography.subst.
+      fold Choreography.subst.
+      unfold Insn.subst.
+
+      assert
+        ((if Insn.rebound_in A x (Insn.EPR A' y B z) then C else Choreography.subst A x v C) = C)
+        as HgoalC.
+      {
+        destruct (Insn.rebound_in A x (Insn.EPR A' y B z)) eqn:Hrbi.
+        { auto. }
+        {
+          unfold Insn.rebound_in in Hrbi.
+          rewrite orb_false_iff in Hrbi.
+          destruct Hrbi as [HrbiA HrbiB].
+          
+          specialize (IHC
+                        (ChorEnv.remove B z (ChorEnv.remove A' y G))
+                        (ChorEnv.add B z Expr.QUBIT (ChorEnv.add A' y Expr.QUBIT D))
+                        T
+                        H8).
+
+          pose proof (nin_remove_ce (ChorEnv.remove A' y G) A x B z
+                        (nin_remove_ce G A x A' y HninG)) as HninGzy.
+
+          pose proof (find_nbeq
+                        (ChorEnv.add A' y Expr.QUBIT D)
+                        A x B z Expr.QUBIT HrbiB
+                        (find_nbeq D A x A' y Expr.QUBIT HrbiA HninD)) as HninDzy.
+
+          apply (IHC HninDzy HninGzy).
+        }
+      }
+
+      setoid_rewrite HgoalC; auto.
+
+      (* Case Let *)
+    + inversion HWTC; subst.
+      unfold Choreography.subst.
+      fold Choreography.subst.
+      unfold Insn.subst.
+      
+      assert
+        ((if Actor.FSet.MF.eq_dec A A' then Expr.subst x v e else e) = e) as Hgoale.
+      {
+        destruct (Actor.FSet.MF.eq_dec A A') eqn:Heq.
+        {
+          subst.
+
+          apply(Expr.subst_not_in e x v 
+                  (ChorEnv.find A' G) DeltaA1 ThetaA1 tau
+                  H3 HninG
+                  (nin_partition x (ChorEnv.find A' D) DeltaA1 DeltaA2 HninD H8)).
+        }
+        { auto. }
+      }
+
+      assert
+        ((if Insn.rebound_in A x (Insn.Let A' y e) then C else Choreography.subst A x v C) = C) as HgoalC.
+      {
+        unfold Insn.rebound_in.
+        destruct (Insn.bind_eqb (A, x) (A', y)) eqn:Hbeq.
+        {
+          setoid_rewrite Hbeq.
+          auto.
+        }
+        {
+          setoid_rewrite Hbeq.
+
+          specialize (IHC
+                        (ChorEnv.remove A' y G)
+                        (Actor.Map.add A' (Var.Map.add y tau DeltaA2) D) 
+                        (Actor.Map.add A' ThetaA2 T)
+                        H7).
+
+          pose proof (nin_remove_ce G A x A' y HninG) as Hnbeq.
+
+          assert (~ Var.Map.In x (ChorEnv.find A (Actor.Map.add A' (Var.Map.add y tau DeltaA2) D)))
+            as HninDadd.
+          {
+            assert (A = A' \/ A <> A') as HAA'eq.
+            tauto.
+            destruct HAA'eq as [HAA'eqL |  HAA'eqR].
+            {
+              rewrite <- HAA'eqL in *.
+              rewrite find_add; auto.
+
+              
+              pose proof (@Var.Map.Properties.Partition_sym _
+                            (ChorEnv.find A D) DeltaA1 DeltaA2 H8) as Hpart.
+              
+              apply (nin_mapl DeltaA2 x y tau (nbeqeq A x y Hbeq)
+                       (nin_partition x (ChorEnv.find A D) DeltaA2 DeltaA1 HninD Hpart)).
+            }
+            {
+              rewrite (find_ab_neq2 A A' (Var.Map.add y tau DeltaA2) D HAA'eqR).
+              auto.
+            }
+          }
+
+          apply (IHC HninDadd Hnbeq).
+        }
+      }
+
+      setoid_rewrite Hgoale.
+      setoid_rewrite HgoalC.
+      auto.
+
+    (* Case LetBang *)
+    + inversion HWTC; subst.
+      unfold Choreography.subst.
+      fold Choreography.subst.
+      unfold Insn.subst.
+
+      assert
+        ((if Actor.FSet.MF.eq_dec A A' then Expr.subst x v e else e) = e) as Hgoale.
+      {
+        destruct (Actor.FSet.MF.eq_dec A A') eqn:Heq.
+        {
+          subst.
+
+          apply(Expr.subst_not_in e x v 
+                  (ChorEnv.find A' G) DeltaA1 ThetaA1 (Expr.BANG tau)
+                  H6 HninG
+                  (nin_partition x (ChorEnv.find A' D) DeltaA1 DeltaA2 HninD H8)).
+        }
+        { auto. }
+      }
+
+      assert
+        ((if Insn.rebound_in A x (Insn.LetBang A' y e) then C else Choreography.subst A x v C) = C) as HgoalC.
+      {
+        unfold Insn.rebound_in.
+        destruct (Insn.bind_eqb (A, x) (A', y)) eqn:Hbeq.
+        {
+          setoid_rewrite Hbeq.
+          auto.
+        }
+        {
+          setoid_rewrite Hbeq.
+
+          specialize (IHC
+                        (ChorEnv.add A' y tau G)
+                        (Actor.Map.add A' DeltaA2 D)
+                        (Actor.Map.add A' ThetaA2 T)
+                        H7).
+
+          pose proof (find_nbeq G A x A' y tau Hbeq HninG) as Hnbeq.
+
+          assert (~ Var.Map.In x (ChorEnv.find A (Actor.Map.add A' DeltaA2 D))) as HninDadd.
+          {
+            assert (A = A' \/ A <> A') as HAA'eq.
+            tauto.
+            destruct HAA'eq as [HAA'eqL |  HAA'eqR].
+            {
+              rewrite <- HAA'eqL in *.
+              rewrite find_add; auto.
+              pose proof (@Var.Map.Properties.Partition_sym _
+                            (ChorEnv.find A D) DeltaA1 DeltaA2 H8) as Hpart.
+              apply (nin_partition x (ChorEnv.find A D) DeltaA2 DeltaA1 HninD Hpart).
+            }
+            {
+              rewrite (find_ab_neq2 A A' DeltaA2 D HAA'eqR).
+              auto.
+            }
+          }
+
+          apply (IHC HninDadd Hnbeq).
+        }
+      }
+      
+      setoid_rewrite Hgoale.
+      setoid_rewrite HgoalC.
+      auto.
+
+    (* Case LetPair *)
+    + inversion HWTC; subst.
+      unfold Choreography.subst.
+      fold Choreography.subst.
+      unfold Insn.subst.
+      
+      assert
+        ((if Actor.FSet.MF.eq_dec A A' then Expr.subst x v e else e) = e) as Hgoale.
+      {
+        destruct (Actor.FSet.MF.eq_dec A A') eqn:Heq.
+        {
+          subst.
+
+          apply(Expr.subst_not_in e x v 
+                  (ChorEnv.find A' G) DeltaA1 ThetaA1 (Expr.Tensor tau1 tau2)
+                  H4 HninG
+                  (nin_partition x (ChorEnv.find A' D) DeltaA1 DeltaA2 HninD H9)).
+        }
+        { auto. }
+      }
+
+      assert
+        ((if Insn.rebound_in A x (Insn.LetPair A' y z e) then C else Choreography.subst A x v C) = C) as HgoalC.
+      {
+        destruct (Insn.rebound_in A x (Insn.LetPair A' y z e)) eqn:Hrbi.
+        { auto. }        
+        {
+          unfold Insn.rebound_in in Hrbi.
+          rewrite orb_false_iff in Hrbi.
+          destruct Hrbi as [HrbiA HrbiB].
+          {
+            specialize (IHC
+                          (ChorEnv.remove A' y (ChorEnv.remove A' z G))
+                          (Actor.Map.add A' (Var.Map.add y tau1 (Var.Map.add z tau2 DeltaA2)) D)
+                          (Actor.Map.add A' ThetaA2 T)                          
+                          H8).
+
+            pose proof (nin_remove_ce (ChorEnv.remove A' z G) A x A' y
+                          (nin_remove_ce G A x A' z HninG)) as HninGzy.
+
+            assert (~ Var.Map.In x
+                      (ChorEnv.find A
+                         (Actor.Map.add A'
+                            (Var.Map.add y tau1
+                               (Var.Map.add z tau2 DeltaA2)) D)))
+              as HninDadd.
+            {
+              assert (A = A' \/ A <> A') as HAA'eq.
+              tauto.
+              destruct HAA'eq as [HAA'eqL |  HAA'eqR].
+              {
+                rewrite <- HAA'eqL in *.
+                rewrite find_add; auto.
+
+                pose proof (nbeqeq A x y HrbiA) as Hnexy.
+                pose proof (nbeqeq A x z HrbiB) as Hnexz.
+                
+                pose proof (@Var.Map.Properties.Partition_sym _
+                              (ChorEnv.find A D) DeltaA1 DeltaA2 H9) as Hpart.
+
+                pose proof (nin_partition x (ChorEnv.find A D) DeltaA2 DeltaA1 HninD Hpart) as HninDA2.
+
+                apply (nin_mapl (Var.Map.add z tau2 DeltaA2) x y tau1 Hnexy
+                              (nin_mapl DeltaA2 x z tau2 Hnexz HninDA2)).
+              }
+              {
+                rewrite (find_ab_neq2 A A' (Var.Map.add y tau1  (Var.Map.add z tau2 DeltaA2)) D HAA'eqR).
+                auto.
+              }
+            }
+            
+            apply (IHC HninDadd HninGzy).
+          }
+        }
+      }
+      
+      setoid_rewrite Hgoale.
+      setoid_rewrite HgoalC.
+      auto.
+
+Qed.
 
 Lemma wt_subst_lin : forall C ThetaA1 ThetaA2 tau G D T A x v,
     Expr.WellTyped (Var.Map.empty _) (Var.Map.empty _) ThetaA1 v tau ->
@@ -2109,12 +2651,12 @@ Proof.
           assert (H : Var.Map.Equal (Var.Map.add x tau DeltaA1') DeltaA1).
           { symmetry. auto. }
           pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau H H10 HninD HDA'B) as Hnin.
-          pose proof (csubst
+          pose proof (subst_not_in
+                        C A x v
                         (ChorEnv.add B y tau0 G)
                         (Actor.Map.add A DeltaA2 D)
                         (Actor.Map.add A ThetaA3 T)
-                        C
-                        A x v H9) as HCSL.
+                        H9) as HCSL.
           rewrite -> (find_add A DeltaA2 D) in HCSL.
           destruct Hnin as [HninA HninB].
           
@@ -2148,8 +2690,9 @@ Proof.
         }
         (* case x not in e *)
         {
-          pose proof (esubst (ChorEnv.find A G) DeltaA1 ThetaA0 e x v (Expr.BANG tau0)
-                             H8 HninG HninDA) as Hesubst.
+          pose proof (Expr.subst_not_in e x v
+                        (ChorEnv.find A G) DeltaA1 ThetaA0 (Expr.BANG tau0)
+                        H8 HninG HninDA) as Hesubst.
           rewrite -> (add_find D A x tau) in H10.
           pose proof (ini (ChorEnv.find A D) DeltaA1 DeltaA2 x tau H10 HninDA) as Hini.
 
@@ -2387,12 +2930,12 @@ Proof.
           assert (Var.Map.Equal (Var.Map.add x tau DeltaA1') DeltaA1).
           { symmetry. auto. }
           pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau H H8 HninD HDA'B) as Hnin.
-          pose proof (csubst
+          pose proof (subst_not_in
+                        C A x v
                         (ChorEnv.remove A y G)
                         (Actor.Map.add A  (Var.Map.add y tau0 DeltaA2) D)
                         (Actor.Map.add A ThetaA3 T)
-                        C
-                        A x v H7) as HCSL.
+                        H7) as HCSL.
           rewrite -> (find_add A (Var.Map.add y tau0 DeltaA2) D) in HCSL.
           destruct Hnin as [HninA HninB].
 
@@ -2425,7 +2968,8 @@ Proof.
         }
         (* case x not in e *)
         {
-          pose proof (esubst (ChorEnv.find A G) DeltaA1 ThetaA0 e x v tau0
+          pose proof (Expr.subst_not_in e x v
+                        (ChorEnv.find A G) DeltaA1 ThetaA0 tau0
                         H3 HninG HninDA) as Hesubst.
           rewrite -> (add_find D A x tau) in H8.
           pose proof (ini (ChorEnv.find A D) DeltaA1 DeltaA2 x tau H8 HninDA) as Hini.
@@ -2619,12 +3163,12 @@ Proof.
              destruct (Insn.rebound_in A x) eqn:Heq.
              { eauto. }
              {
-               pose proof (csubst
+               pose proof (subst_not_in
+                             C A x v
                              (ChorEnv.add A y tau0 G)
                              (Actor.Map.add A DeltaA2 D)
                              (Actor.Map.add A ThetaA3 T)
-                             C
-                             A x v H7) as HCSL.
+                             H7) as HCSL.
                rewrite -> (find_add A DeltaA2 D) in HCSL.
                specialize (HCSL HninA (find_nbeq G A x A y tau0 Heq HninG)).
                rewrite -> HCSL.
@@ -2637,7 +3181,8 @@ Proof.
         }
         (* case x not in e *)
         {
-          pose proof (esubst (ChorEnv.find A G) DeltaA1 ThetaA0 e x v (Expr.BANG tau0)
+          pose proof (Expr.subst_not_in e x v 
+                        (ChorEnv.find A G) DeltaA1 ThetaA0 (Expr.BANG tau0)
                         H6 HninG HninDA) as Hesubst.
           rewrite -> (add_find D A x tau) in H8.
           pose proof (ini (ChorEnv.find A D) DeltaA1 DeltaA2 x tau H8 HninDA) as Hini.
@@ -2706,10 +3251,14 @@ Proof.
 
             +  assert (Var.Map.Equal (Var.Map.add x tau DeltaA2') DeltaA2) as Hdel.
                { symmetry. auto. }
-               pose proof (@Var.Map.Properties.Partition_sym _ (Var.Map.add x tau (ChorEnv.find A D)) DeltaA1 DeltaA2 H8) as Hpart.
-               pose proof (nin (ChorEnv.find A D) DeltaA2' DeltaA2 DeltaA1 x tau Hdel Hpart HninD HDA2B) as Hnin.
+               pose proof (@Var.Map.Properties.Partition_sym _
+                             (Var.Map.add x tau (ChorEnv.find A D)) DeltaA1 DeltaA2 H8) as Hpart.
+               pose proof (nin
+                             (ChorEnv.find A D) DeltaA2' DeltaA2 DeltaA1
+                             x tau Hdel Hpart HninD HDA2B) as Hnin.
                destruct Hnin as [HninA HninB].
-               pose proof (@Var.Map.Properties.Partition_sym _ (ChorEnv.find A D) DeltaA2' DeltaA1 HninB).
+               pose proof (@Var.Map.Properties.Partition_sym _
+                             (ChorEnv.find A D) DeltaA2' DeltaA1 HninB).
                auto.
 
             + auto.
@@ -2810,12 +3359,12 @@ Proof.
           assert (Var.Map.Equal (Var.Map.add x tau DeltaA1') DeltaA1).
           { symmetry. auto. }
           pose proof (nin (ChorEnv.find A D) DeltaA1' DeltaA1 DeltaA2 x tau H H9 HninD HDA'B) as Hnin.
-          pose proof (csubst
+          pose proof (subst_not_in
+                        C A x v
                         (ChorEnv.remove A y (ChorEnv.remove A z G))
                         (Actor.Map.add A (Var.Map.add y tau1 (Var.Map.add z tau2 DeltaA2)) D)
                         (Actor.Map.add A ThetaA3 T)
-                        C
-                        A x v H8) as HCSL.
+                        H8) as HCSL.
           rewrite -> (find_add A (Var.Map.add y tau1 (Var.Map.add z tau2 DeltaA2)) D) in HCSL.
           destruct Hnin as [HninA HninB].
 
@@ -2856,7 +3405,8 @@ Proof.
         }
         (* case x not in e *)
         {
-          pose proof (esubst (ChorEnv.find A G) DeltaA1 ThetaA0 e x v (Expr.Tensor tau1 tau2)
+          pose proof (Expr.subst_not_in e x v
+                        (ChorEnv.find A G) DeltaA1 ThetaA0 (Expr.Tensor tau1 tau2)
                         H4 HninG HninDA) as Hesubst.
           rewrite -> (add_find D A x tau) in H9.
           pose proof (ini (ChorEnv.find A D) DeltaA1 DeltaA2 x tau H9 HninDA) as Hini.
@@ -3018,14 +3568,13 @@ Proof.
       }
 Qed.
 
-(* placeholder for well-formedness definition *)
-Definition  WellFormed (cfg : Config.t) (C : ChorEnv.t nat) : Prop := True.
+Definition  WellScoped (T : ChorEnv.t nat) (cfg : Config.t) : Prop :=
+  forall A, Config.WellScoped (ChorEnv.find A T) cfg.
 
-(* DISCUSS: well-formedness and presesvation of Expr.WellScoped? *)
 Theorem preservation : forall C1 T1 cfg1 l C2 T2 cfg2,
-  step C1 T1 cfg1 l C2 T2 cfg2 ->
-  WellFormed cfg1 T1 ->
-  WellTyped (Actor.Map.empty _) (Actor.Map.empty _) T1 C1 ->
-  WellFormed cfg2 T2 /\ WellTyped (Actor.Map.empty _) (Actor.Map.empty _) T2 C2.
+    WellTyped (Actor.Map.empty _) (Actor.Map.empty _) T1 C1 ->
+    step C1 T1 cfg1 l C2 T2 cfg2 ->
+    WellScoped T1 cfg1 ->
+    WellTyped (Actor.Map.empty _) (Actor.Map.empty _) T2 C2.
 Proof.
 Admitted.
