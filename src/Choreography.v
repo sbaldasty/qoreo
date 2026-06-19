@@ -98,7 +98,6 @@ Module Insn.
       | (_, right pt2) => right (nbeqlr Ax By (or_intror pt2))
       end.
 
-
     (* Unwieldy but leaving as advanced technical example. *)
     (* Definition bind_eqb (Ax : bindt) (By: bindt) : bool :=
        match (bool_of_sumbool (bind_eq_dec Ax By)) with
@@ -120,6 +119,7 @@ Module Insn.
         apply HbeqB.
         unfold bind_eqb in H.
         (* NOTE destruction of dependent type with desired spec! *)
+        Check bind_eq_dec.
         destruct (bind_eq_dec Ax By) in H.
         {
           specialize (HbeqA b).
@@ -3611,6 +3611,5 @@ Proof.
         apply (ws_partition (ChorEnv.find A T) ThetaA1 ThetaA2 cfg Hscoped H13).
       }
       { 
-        eauto. }
 
 Admitted.
