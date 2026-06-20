@@ -762,7 +762,12 @@ Lemma nin_partition : forall x (M M1 M2 : Var.Map.t Expr.typ),
     Var.Map.Partition M M1 M2 ->
     ~ Var.Map.In x M1.
 Proof.
-Admitted.
+  intros.
+  pose proof (Var.Map.Proofs.partition_not_in_inversion Expr.typ M M1 M2 x H0) as Hpni.
+  destruct Hpni as [Hpni _].
+  destruct (Hpni H).
+  auto.
+Qed.
 
 Lemma partition_remove_all : forall (CE1 : ChorEnv.t Expr.typ) CE2 CE3 A B x,
     Var.Map.Partition (ChorEnv.find A CE1) (ChorEnv.find A CE2) (ChorEnv.find A CE3) ->
