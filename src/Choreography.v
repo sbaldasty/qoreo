@@ -248,12 +248,13 @@ Inductive step : Choreography.t -> ChorEnv.t nat -> Config.t ->
           (Label.Loc A)
           (Insn.Send A e' B x :: C) T' cfg'
 
-| SendB : forall A v B x C T cfg C',
+| SendB : forall A v B x C refs refs' cfg C',
     Expr.Val v ->
     C' = Choreography.subst B x v C ->
-    step  (Insn.Send A v B x :: C) T cfg
+    ChorEnv.Equal refs refs' ->
+    step  (Insn.Send A v B x :: C) refs cfg
           (Label.Send A v B)
-          C' T cfg
+          C' refs' cfg
 
 | EPRB : forall q1 q2 A x B y C T cfg C' T' cfg',
     ChorEnv.epr A B T cfg = (q1, q2, T', cfg') ->
