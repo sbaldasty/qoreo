@@ -647,7 +647,26 @@ Lemma remove_dj_env : forall (CE1 CE2 : ChorEnv.t Expr.typ) A B x,
       (ChorEnv.find A (ChorEnv.remove B x CE1))
       (ChorEnv.find A CE2).
 Proof.
-Admitted.
+  intros.
+  intros D. intros [Hin1 Hin2].
+  
+  (* Because D in find A (remove B x CE1), we know A <> B *)
+  assert (A <> B).
+  {
+    intros ?; subst.
+    unfold ChorEnv.remove, ChorEnv.find in Hin1.
+    Actor.simplify.
+    destruct (Actor.Map.find B CE1) as [CB1 | ] eqn:HB1.
+    2:{ Var.simplify. }
+    Var.simplify.
+    apply (H D). split; auto.
+    unfold ChorEnv.find. rewrite HB1. auto.
+  }
+  Var.simplify.
+  destruct (Actor.eq_dec A B) as [Heq | ].
+  { unfold Actor.eq in Heq. subst; contradiction. }
+  apply (H D); auto.
+Qed.
 
 Lemma remove_add_dj_env : forall (CE1 CE2 : ChorEnv.t Expr.typ) A B x tau,
     Var.Map.Properties.Disjoint (ChorEnv.find A CE1) (ChorEnv.find A CE2) ->
@@ -928,7 +947,18 @@ Proof.
   (* should work but strange typing issues here... 
   rewrite
     (Actor.Map.Proofs.remove_swap (Expr.typ) x y (ChorEnv.find A CE)).*)
-Admitted.
+  split.
+  * intros D. Actor.simplify.
+  * intros D PD PD' HD HD'.
+    Actor.simplify.
+    destruct HD  as [[? ?] | [? HD]];
+    destruct HD' as [[? ?] | [? HD']];
+      subst; try contradiction.
+    + rewrite Var.Map.Proofs.remove_swap. reflexivity.
+    + Search Actor.Map.MapsTo (_ = _).
+      replace PD' with PD; try reflexivity.
+      eapply Actor.Map.Properties.F.MapsTo_fun; eauto.
+Qed.
 
 Lemma rmadd1 : forall (CE : ChorEnv.t Expr.typ) A x tau,
     ChorEnv.Equal
@@ -1152,13 +1182,46 @@ Lemma map_partition_map : forall x tau (M : Var.Map.t Expr.typ) M1 M2,
     Var.Map.Partition M M1 M2 ->
     Var.Map.MapsTo x tau M.
 Proof.
-Admitted.
+  intros x tau M M1 M2 HM2 Hpart.
+  Var.Map.Tactics.reflect_partition.
+  Var.solve.
+  destruct (Var.Map.find x M1) eqn:HM1; auto.
+  { (* x in M1 *)
+    exfalso. apply (Hdisj x).
+    split; Var.solve.
+  }
+Qed.
 
 Lemma readd_eq: forall A x tau (CE : ChorEnv.t Expr.typ),
     Var.Map.MapsTo x tau (ChorEnv.find A CE) ->
     ChorEnv.Equal (ChorEnv.add A x tau CE) CE.
 Proof.
-Admitted.
+  intros A x tau CE Hmapsto.
+  unfold ChorEnv.add, ChorEnv.find in *.
+  destruct (Actor.Map.find A CE) as [ctx | ] eqn:Hfind.
+  2:{ Var.simplify. }
+
+  split.
+  + intros B.
+    Actor.Map.Tactics.compare A B.
+    {
+      Actor.simplify.
+      Actor.solve.
+    }
+    Actor.simplify.
+  + intros B G G' HG HG'.
+    Actor.simplify.
+    destruct HG as [[? ?] | [? HG]]; subst.
+    { (*A=B*)
+      Actor.reflect_find. inversion Hfind; subst; clear Hfind.
+      intros D.
+      Var.solve.
+    }
+    { (* A <> B *)
+      replace G with G'; try reflexivity.
+      eapply Actor.Map.Properties.F.MapsTo_fun; eauto.
+    }
+Qed.
 
 Lemma remove_add_partition : forall (CE1 CE2 CE3: ChorEnv.t Expr.typ) A B x tau,
     Var.Map.Partition (ChorEnv.find A CE1)
@@ -1168,10 +1231,45 @@ Lemma remove_add_partition : forall (CE1 CE2 CE3: ChorEnv.t Expr.typ) A B x tau,
       (ChorEnv.find A (ChorEnv.add B x tau CE2))
       (ChorEnv.find A (ChorEnv.remove B x CE3)).
 Proof.
-Admitted.
+  intros ? ? ? ? ? ? ? Hpart Hmapsto.
+  unfold ChorEnv.remove, ChorEnv.add, ChorEnv.find in *.
+  Actor.simplify. Var.simplify.
+    destruct (Actor.Map.find B CE1) as [ctx1 | ] eqn:HB1;
+    destruct (Actor.Map.find B CE2) as [ctx2 | ] eqn:HB2;
+    destruct (Actor.Map.find B CE3) as [ctx3 | ] eqn:HB3;
+      Var.simplify.
+  * Var.Map.Tactics.reflect_partition.
+    2:{
+      Var.simplify.
+      intros D. Var.simplify.
+      Var.reflect_find. auto.
+    }
+
+    rewrite Var.Map.MProofs.Proofs.disjoint_add_1.
+    split; auto.
+    { apply Var.Map.Proofs.disjoint_remove_2; auto. }
+    Var.simplify.
+
+  * Var.Map.Tactics.reflect_partition.
+    2:{
+      Var.simplify.
+      intros y. Var.reflect_find; auto.
+      destruct (Var.Map.find y ctx1); auto.
+    }
+    apply Var.Map.Proofs.disjoint_empty_2.
+
+  * Var.Map.Tactics.reflect_partition.
+    2:{
+      Var.simplify.
+      intros y. Var.reflect_find; auto.
+    }
+    Var.simplify. split; [ | intros [? ?]; contradiction].
+    Var.simplify.
+Qed.
+
   
 Lemma map_subset_add : forall A B y tau (CE1 : ChorEnv.t Expr.typ) CE2 CE3,
-    ~ Var.Map.MapsTo y tau (ChorEnv.find B CE3) ->
+    ~ Var.Map.In y (ChorEnv.find B CE3) ->
     Var.Map.Partition (ChorEnv.find A CE1) (ChorEnv.find A CE2) (ChorEnv.find A CE3) ->
     Var.Map.Partition
       (ChorEnv.find A (ChorEnv.add B y tau CE1))
@@ -1181,8 +1279,7 @@ Proof.
   Var.simplify.
   Actor.Map.Tactics.compare A B; subst; auto.
   apply Var.Map.Proofs.partition_add_l; auto.
-    admit (*??*).
-Admitted.
+Qed.
 
 Lemma add_mapsto : forall x (tau : Expr.typ) m,
     Var.Map.MapsTo x tau m ->
