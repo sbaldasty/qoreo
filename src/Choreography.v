@@ -700,7 +700,29 @@ Proof.
   unfold ChorEnv.find.
   Actor.simplify.
   Var.simplify.
-Qed.  
+Qed. 
+
+Lemma empty_map_empty : forall {X : Type}, Var.Map.Empty (Var.Map.empty X).
+Proof.
+  intros.
+  Var.simplify.
+Qed.
+
+Lemma empty_to_empty : forall  {X : Type} A (M : Var.Map.t X),
+    Var.Map.Empty M ->
+    (Actor.Map.add A M (Actor.Map.empty (Var.Map.t X))) = (Actor.Map.empty (Var.Map.t X)).
+Proof.
+  intros.
+  pose proof (Var.Map.Proofs.empty_map_equal M H).
+Admitted.
+
+Lemma find_empty : forall {X : Type} A,
+    (ChorEnv.find A (Actor.Map.empty (Var.Map.t X))) =  (Var.Map.empty X).
+Proof.
+  intros.
+  unfold ChorEnv.find.
+  Actor.simplify.
+Qed.
 
 Lemma empty_partition : forall (M M1 M2 : Var.Map.t Expr.typ),
     Var.Map.Empty M ->
@@ -709,6 +731,14 @@ Lemma empty_partition : forall (M M1 M2 : Var.Map.t Expr.typ),
 Proof.
   intros; Var.simplify.
 Qed.
+
+Lemma lopsided_partition : forall {X : Type} (M M1 : Var.Map.t X),
+    Var.Map.Partition M (Var.Map.empty X) M1 ->
+    M = M1.
+Proof.
+  intros; Var.simplify.
+  (* Chris doesn't know how to work with Map Equality (Var.Map.M.Equal)... *)
+Admitted.
 
 Lemma find_add : forall {X : Type} A M (CE : ChorEnv.t X),
     ChorEnv.find A (Actor.Map.add A M CE) = M.
@@ -2795,7 +2825,8 @@ Proof.
                 assert (IHWT : WellTyped (ChorEnv.add B y tau0 G)
                                          (ChorEnv.add A x tau (Actor.Map.add A
                                             (Var.Map.remove (elt:=Expr.typ) x DeltaA2) D))
-                                         (Actor.Map.add A ThetaA3 (Actor.Map.add A (Var.Map.concat ThetaA1 ThetaA3) T))
+                                         (Actor.Map.add A ThetaA3
+                                            (Actor.Map.add A (Var.Map.concat ThetaA1 ThetaA3) T))
                                          C).
                 {
                   eapply WellTypedProper; eauto.
@@ -3639,6 +3670,14 @@ Lemma ws_partition : forall M M1 M2 cfg,
 Proof.
 Admitted.
 
+Lemma bangty_inversion : forall Gamma Delta Theta e tau,
+    Expr.WellTyped Gamma Delta Theta (Expr.Bang e) (Expr.BANG tau) ->
+    Expr.WellTyped Gamma Delta Theta e tau /\
+      Delta = (Var.Map.empty Expr.typ) /\
+      Theta = (Var.Map.empty nat).
+Proof.
+Admitted.
+
 Theorem preservation : forall C1 T1 cfg1 l C2 T2 cfg2,
     step C1 T1 cfg1 l C2 T2 cfg2 ->
     WellTyped (Actor.Map.empty _) (Actor.Map.empty _) T1 C1 ->
@@ -3650,16 +3689,16 @@ Proof.
   induction Hstep.
 
   (* Case SendC *)
-   - intros HWT Hscoped.
-
+  - intros HWT Hscoped.
+    
     inversion HWT; subst.
-
+    
     unfold  WellScoped in Hscoped.
     specialize (Hscoped A).
-
+    
     rewrite (Var.Map.Proofs.empty_map_equal (ChorEnv.find A (Actor.Map.empty (Var.Map.t Expr.typ)))
                (empty_is_empty (X:=Expr.typ) A)) in H13.
-
+    
     assert (Var.Map.Empty (Var.Map.M.empty Expr.typ)) as Hee.
     Var.simplify.
     
@@ -3709,6 +3748,29 @@ Proof.
       rewrite find_add; auto.
     }
 
-   (* Case SendB *)
-   - 
+  (* Case SendB *)
+  - intros HWT Hscoped.
+    
+    inversion HWT; subst.
+    rewrite <- H0 in *.
+
+    rewrite find_empty in H10.
+    destruct (bangty_inversion (Var.Map.empty Expr.typ) DeltaA1 ThetaA1 v tau H10)
+      as [HbangA [HbangB HbangC]].
+    rewrite HbangB in *.
+    rewrite HbangC in *.
+
+    rewrite find_empty in H12.
+    pose proof (@Var.Map.Properties.Partition_sym _
+                  (Var.Map.empty Expr.typ) (Var.Map.empty Expr.typ) DeltaA2 H12) as Hpart.
+    pose proof (empty_partition
+                  (Var.Map.empty Expr.typ) DeltaA2 (Var.Map.empty Expr.typ)
+                  empty_map_empty Hpart) as Hep.
+
+    rewrite empty_to_empty in H11; auto.
+
+    
 Admitted.
+
+
+
