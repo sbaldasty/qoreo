@@ -736,6 +736,15 @@ Proof.
   Actor.simplify.
 Qed.
 
+Lemma find_ab_neq3 : forall {X : Type} A B x (CE : ChorEnv.t X),
+    A <> B ->
+    (ChorEnv.find A (ChorEnv.remove B x CE)) = (ChorEnv.find A CE).
+Proof.
+  intros X A B x CE Hneq.
+  unfold ChorEnv.find. unfold ChorEnv.remove.
+  Actor.simplify.
+Qed.
+
 Lemma find_nbeq : forall (CE : ChorEnv.t Expr.typ) A x B y tau,
     Insn.bind_eqb (A, x) (B, y) = false -> 
     ~ Var.Map.In x (ChorEnv.find A CE) ->
@@ -1268,7 +1277,7 @@ Proof.
 Qed.
 
   
-Lemma map_subset_add : forall A B y tau (CE1 : ChorEnv.t Expr.typ) CE2 CE3,
+Lemma map_subset_add' : forall A B y tau (CE1 : ChorEnv.t Expr.typ) CE2 CE3,
     ~ Var.Map.In y (ChorEnv.find B CE3) ->
     Var.Map.Partition (ChorEnv.find A CE1) (ChorEnv.find A CE2) (ChorEnv.find A CE3) ->
     Var.Map.Partition
@@ -1280,6 +1289,14 @@ Proof.
   Actor.Map.Tactics.compare A B; subst; auto.
   apply Var.Map.Proofs.partition_add_l; auto.
 Qed.
+
+Lemma map_subset_add : forall A B y tau (CE1 : ChorEnv.t Expr.typ) CE2 CE3,
+    Var.Map.Partition (ChorEnv.find A CE1) (ChorEnv.find A CE2) (ChorEnv.find A CE3) ->
+    Var.Map.Partition
+      (ChorEnv.find A (ChorEnv.add B y tau CE1))
+      (ChorEnv.find A (ChorEnv.add B y tau CE2)) (ChorEnv.find A (ChorEnv.remove B y CE3)).
+Proof.
+Admitted.
 
 Lemma add_mapsto : forall x (tau : Expr.typ) m,
     Var.Map.MapsTo x tau m ->
@@ -1624,61 +1641,17 @@ Proof.
       { auto. } 
       { eapply HEWG. }
       {
-        assert (Var.Map.MapsTo y tau (ChorEnv.find B G0) \/
-                  ~ Var.Map.MapsTo y tau (ChorEnv.find B G0)) as HCasesByinG0.
-        tauto.
-        
-        destruct HCasesByinG0 as [HCasesByinG0L | HCasesByinG0R].
-        {
-          specialize (HE B) as HEBinG0.
-          destruct HEBinG0 as [HEBinG0A HEBinG0B].
-          pose proof (map_partition_map y tau
-                        (ChorEnv.find B G') (ChorEnv.find B G) (ChorEnv.find B G0)
-                        HCasesByinG0L
-                        HEBinG0A) as Hmpm.
-          rewrite (readd_eq B y tau G' Hmpm).
-          
-          apply (IHC
+        apply (IHC
                    (ChorEnv.add B y tau G) (Actor.Map.add A DeltaA2 D)
-                   (Actor.Map.add A ThetaA2 T) (ChorEnv.remove B y G0) H9 G').
+                   (Actor.Map.add A ThetaA2 T) (ChorEnv.remove B y G0) H9 (ChorEnv.add B y tau G')).
 
-          intros A0.
-          destruct (HE A0) as [HEA0A HA0EB].
-
-          split.
-          {
-            apply (remove_add_partition G' G G0 A0 B y tau HEA0A Hmpm).
-          }
-          {
-            pose proof (remove_dj_env G0 D A0 B y HA0EB) as HG0Ddj.
-
-            assert (A0 = A \/ A0 <> A) as HeqA0A.
-            tauto.
-            destruct HeqA0A as [HeqA0AL | HeqA0AR].
-            {
-              rewrite HeqA0AL in *.
-              rewrite find_add.
-              pose proof (@Var.Map.Properties.Partition_sym _
-                            (ChorEnv.find A D) DeltaA1 DeltaA2 H10) as Hpart.
-              apply (partition_dj
-                       (ChorEnv.find A (ChorEnv.remove B y G0))
-                       (ChorEnv.find A D)
-                       DeltaA2 DeltaA1
-                       HG0Ddj Hpart).
-            }
-            { rewrite find_ab_neq2; auto. }
-
-          }
-        }
+        intros A0.
+        destruct (HE A0) as [HEA0A HEA0B].
+        split.
+        { apply (map_subset_add A0 B y tau G' G G0 HEA0A). }
         {
-          apply (IHC
-                   (ChorEnv.add B y tau G) (Actor.Map.add A DeltaA2 D)
-                   (Actor.Map.add A ThetaA2 T) G0 H9 (ChorEnv.add B y tau G')).       
-          intros A0.
-          destruct (HE A0) as [HEA0A HEA0B].
-          split.
-          { apply (map_subset_add A0 B y tau G' G G0 HCasesByinG0R HEA0A). }
-          { apply (partition_dj_env A0 A G0 D DeltaA1 DeltaA2 HEA0B H10). }
+          pose proof (partition_dj_env A0 A G0 D DeltaA1 DeltaA2 HEA0B H10) as Hpdje. 
+          apply (remove_dj_env G0 (Actor.Map.add A DeltaA2 D) A0 B y Hpdje).
         }
       }
       { auto. }
@@ -1770,64 +1743,20 @@ Proof.
       eapply LetBang.     
       { eauto. } 
       {
-        assert (Var.Map.MapsTo y tau (ChorEnv.find A G0) \/
-                  ~ Var.Map.MapsTo y tau (ChorEnv.find A G0)) as HCasesAyinG0.
-        tauto.
-        
-        destruct HCasesAyinG0 as [HCasesAyinG0L | HCasesAyinG0R].
-        {
-          specialize (HE A) as HEAinG0.
-          destruct HEAinG0 as [HEAinG0A HEAinG0B].
-          pose proof (map_partition_map y tau
-                        (ChorEnv.find A G') (ChorEnv.find A G) (ChorEnv.find A G0)
-                        HCasesAyinG0L
-                        HEAinG0A) as Hmpm.
-          rewrite (readd_eq A y tau G' Hmpm).
-          
-          apply (IHC
-                   (ChorEnv.add A y tau G) (Actor.Map.add A DeltaA2 D)
-                   (Actor.Map.add A ThetaA2 T) (ChorEnv.remove A y G0) H7 G').
+        apply (IHC
+                 (ChorEnv.add A y tau G) (Actor.Map.add A DeltaA2 D)
+                 (Actor.Map.add A ThetaA2 T) (ChorEnv.remove A y G0) H7 (ChorEnv.add A y tau G')).
 
-          intros A0.
-          destruct (HE A0) as [HEA0A HA0EB].
-          split.
-          {
-            apply (remove_add_partition G' G G0 A0 A y tau HEA0A Hmpm).
-          }
-          {
-            pose proof (remove_dj_env G0 D A0 A y HA0EB) as HG0Ddj.
-
-            assert (A0 = A \/ A0 <> A) as HeqA0A.
-            tauto.
-            destruct HeqA0A as [HeqA0AL | HeqA0AR].
-            {
-              rewrite HeqA0AL in *.
-              rewrite find_add.
-              pose proof (@Var.Map.Properties.Partition_sym _
-                            (ChorEnv.find A D) DeltaA1 DeltaA2 H8) as Hpart.
-              apply (partition_dj
-                       (ChorEnv.find A (ChorEnv.remove A y G0))
-                       (ChorEnv.find A D)
-                       DeltaA2 DeltaA1
-                       HG0Ddj Hpart).
-            }
-            { rewrite find_ab_neq2; auto. }
-          }
-        }
+        intros A0.
+        destruct (HE A0) as [HEA0A HEA0B].
+        split.
+        { apply (map_subset_add A0 A y tau G' G G0 HEA0A). }
         {
-          apply (IHC
-                   (ChorEnv.add A y tau G) (Actor.Map.add A DeltaA2 D)
-                   (Actor.Map.add A ThetaA2 T) G0 H7 (ChorEnv.add A y tau G')).       
-          intros A0.
-          destruct (HE A0) as [HEA0A HEA0B].
-          split.
-          { apply (map_subset_add A0 A y tau G' G G0 HCasesAyinG0R HEA0A). }
-          { apply (partition_dj_env A0 A G0 D DeltaA1 DeltaA2 HEA0B H8). }
+          pose proof (partition_dj_env A0 A G0 D DeltaA1 DeltaA2 HEA0B H8) as Hpdje. 
+          apply (remove_dj_env G0 (Actor.Map.add A DeltaA2 D) A0 A y Hpdje).
         }
       }
-   
       { auto. }
-
       { auto. }
       
     (* Case LetPair *)
