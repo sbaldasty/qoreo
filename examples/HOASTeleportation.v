@@ -8,27 +8,27 @@ Open Scope example_scope.
 
 Definition teleport (Alice Bob : Actor.t) (q : Var.t) : Qoreo Var.t :=
       (* Alice and Bob establish an entangled pair of qubits. *)
-      ( a , b ) ← get_entangled_pair Alice Bob ;;
+      do ( a , b ) ← get_entangled_pair Alice Bob ;;
 
       (* Alice performs some local operations
          and obtains classical bits x and z. *)
-      (q,a) ← Alice [-- Unitary CNOT (Pair q a) -] ;;
-      q     ← Alice [- Unitary H q -] ;;
-      x ← Alice [- Meas q -];;
-      z ← Alice [- Meas q -];;
+      do (q,a) ← Alice [-- Unitary CNOT (Pair q a) -] ;;
+      do q     ← Alice [- Unitary H q -] ;;
+      do x ← Alice [- Meas q -];;
+      do z ← Alice [- Meas q -];;
 
       (* Alice sends x and z to Bob. *)
-      x ← send Alice x Bob ;;
-      z ← send Alice z Bob ;;
+      do x ← send Alice x Bob ;;
+      do z ← send Alice z Bob ;;
 
       (* Bob uses x and z to update his qubit. *)
-      b ← Bob [- If z (Unitary Z b) b -];;
-      b ← Bob [- If x (Unitary X b) b -];;
+      do b ← Bob [- If z (Unitary Z b) b -];;
+      do b ← Bob [- If x (Unitary X b) b -];;
       ret b.
 
 Definition choreo : Choreography.t :=
   mk (
-    q ← "alice" [- Unitary H (New (Bit false))-] ;;
+    do q ← "alice" [- Unitary H (New (Bit false))-] ;;
     teleport "alice" "bob" q
   ).
 
