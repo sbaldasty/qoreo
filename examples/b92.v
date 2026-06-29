@@ -16,7 +16,9 @@ Module B92.
   when Bob measures 1: measuring 1 in the Z-basis means Alice must have sent
   |+⟩, and measuring 1 in the X-basis means Alice must have sent |0⟩.  Bob
   announces his result to Alice so both parties know which rounds to keep. *)
-  Definition b92_round (Alice Bob : Actor.t) : Qoreo Var.t :=
+  (* Returns ((alice_bit, alice_recv), (bob_basis, bob_result)).
+     When bob_result = 1 the round is conclusive: alice_bit = NOT bob_basis. *)
+  Definition b92_round (Alice Bob : Actor.t) : Qoreo ((Var.t * Var.t) * (Var.t * Var.t)) :=
   (* Alice randomly picks her key bit by preparing |+⟩ and measuring. *)
   do coin_a ← Alice [- Unitary H (New (Bit false)) -] ;;
   do a      ← Alice [- Meas coin_a -] ;;
@@ -26,7 +28,7 @@ Module B92.
   do q      ← Alice [- If a (Unitary H q) q -] ;;
 
   (* Alice sends the qubit to Bob over the quantum channel. *)
-  do q_b    ← send Alice q Bob ;;
+  do q_b    ← teleport Alice Bob q ;;
 
   (* Bob randomly picks his measurement basis. *)
   do coin_b ← Bob [- Unitary H (New (Bit false)) -] ;;
@@ -40,63 +42,34 @@ Module B92.
   do r      ← Bob [- Meas q_b -] ;;
 
   (* Bob announces the round result to Alice over the classical channel. *)
-  send Bob r Alice.
+  do r_recv ← send Bob r Alice ;;
+
+  ret ((a, r_recv), (b, r)).
 
 
-  (* Three rounds of B92.  In each conclusive round (Bob measures 1) Alice and
-  Bob share the same key bit: Alice's prepared bit equals Bob's inferred bit. *)
+  (* Three rounds of B92 followed by local key packaging.
+     Alice packages ((r1,a1),(r2,a2),(r3,a3)) where ri is Bob's announcement
+     and ai is her prepared bit.  Bob packages ((m1,~b1),(m2,~b2),(m3,~b3))
+     where mi is his measurement result and ~bi is his inferred key bit.
+     In each conclusive round (ri=1) the key bits agree: ai = ~bi. *)
   Definition choreo : Choreography.t :=
   mk (
-      do _ ← b92_round "alice" "bob" ;;
-      do _ ← b92_round "alice" "bob" ;;
-      b92_round "alice" "bob"
+    do (ad1, bd1) ← b92_round "alice" "bob" ;;
+    do (a1, r1)   ← ret ad1 ;;
+    do (b1, m1)   ← ret bd1 ;;
+    do (ad2, bd2) ← b92_round "alice" "bob" ;;
+    do (a2, r2)   ← ret ad2 ;;
+    do (b2, m2)   ← ret bd2 ;;
+    do (ad3, bd3) ← b92_round "alice" "bob" ;;
+    do (a3, r3)   ← ret ad3 ;;
+    do (b3, m3)   ← ret bd3 ;;
+    do _ ← "alice" [- Pair (Pair (Pair (Var r1) (Var a1))
+                                 (Pair (Var r2) (Var a2)))
+                           (Pair (Var r3) (Var a3)) -] ;;
+    "bob"          [- Pair (Pair (Pair (Var m1) (If (Var b1) (Bit false) (Bit true)))
+                                 (Pair (Var m2) (If (Var b2) (Bit false) (Bit true))))
+                           (Pair (Var m3) (If (Var b3) (Bit false) (Bit true))) -]
   ).
-
-  Eval compute in choreo.
-
-  Eval compute in (Network.epp "alice" choreo).
-  (*
-  do 0  ← Unitary H (New (Bit false)) ;;
-  do 1  ← Meas 0 ;;
-  do 2  ← New (Bit false) ;;
-  do 3  ← If 1 (Unitary H 2) 2 ;;
-  do _  ← Send 3 "bob" ;;
-  do 9  ← Receive "bob" ;;
-  do 10 ← Unitary H (New (Bit false)) ;;
-  do 11 ← Meas 10 ;;
-  do 12 ← New (Bit false) ;;
-  do 13 ← If 11 (Unitary H 12) 12 ;;
-  do _  ← Send 13 "bob" ;;
-  do 19 ← Receive "bob" ;;
-  do 20 ← Unitary H (New (Bit false)) ;;
-  do 21 ← Meas 20 ;;
-  do 22 ← New (Bit false) ;;
-  do 23 ← If 21 (Unitary H 22) 22 ;;
-  do _  ← Send 23 "bob" ;;
-  Receive "bob"
-  *)
-
-  Eval compute in (Network.epp "bob" choreo).
-  (*
-  do 4  ← Receive "alice" ;;
-  do 5  ← Unitary H (New (Bit false)) ;;
-  do 6  ← Meas 5 ;;
-  do 7  ← If 6 (Unitary H 4) 4 ;;
-  do 8  ← Meas 7 ;;
-  do _  ← Send 8 "alice" ;;
-  do 14 ← Receive "alice" ;;
-  do 15 ← Unitary H (New (Bit false)) ;;
-  do 16 ← Meas 15 ;;
-  do 17 ← If 16 (Unitary H 14) 14 ;;
-  do 18 ← Meas 17 ;;
-  do _  ← Send 18 "alice" ;;
-  do 24 ← Receive "alice" ;;
-  do 25 ← Unitary H (New (Bit false)) ;;
-  do 26 ← Meas 25 ;;
-  do 27 ← If 26 (Unitary H 24) 24 ;;
-  do 28 ← Meas 27 ;;
-  Send 28 "alice"
-  *)
 
 
   Definition parties : list Actor.t :=
